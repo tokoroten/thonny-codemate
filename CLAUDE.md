@@ -16,7 +16,7 @@ This is a Thonny IDE plugin that integrates local LLM capabilities using llama-c
 
 また、AIは作業を開始する前に`docs_for_ai/todo.md` を参照し、タスクを確認してください。
 新たなタスクが発生した場合は、このファイルに追加してください。
-タスクが完了したら、 `docs_for_ai/todo.md` の該当箇所を完了のステータスにしてください。
+タスクが完了したら、 `docs_for_ai/todo.md` の該当箇所を完了のステータスにしてください。i had
 
 ## Project Goals
 
