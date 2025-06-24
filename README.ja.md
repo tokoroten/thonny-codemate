@@ -10,7 +10,9 @@ Thonny IDEにローカルLLM機能を統合するプラグインです。llama-c
 - 💡 **コード解説**: コードを選択してコンテキストメニューからAIによる解説を取得
 - 🎯 **コンテキスト認識**: 複数のファイルとプロジェクトのコンテキストを理解
 - 🎚️ **スキルレベル適応**: ユーザーのプログラミングスキルレベルに応じて回答を調整
-- 🔌 **外部API対応（オプション）**: ChatGPT、Ollamaサーバー、OpenRouterを代替として使用可能
+- 🔌 **外部API対応**: ChatGPT、Ollamaサーバー、OpenRouterをオプションで使用可能
+- 📥 **モデルダウンロードマネージャー**: 推奨モデルの組み込みダウンロードマネージャー
+- 🎨 **カスタマイズ可能なシステムプロンプト**: カスタムシステムプロンプトでAIの動作を調整
 - 💾 **USBポータブル**: Thonnyとモデルをバンドルしてポータブル使用が可能
 
 ## インストール
@@ -21,31 +23,55 @@ pip install thonny-ollama
 ```
 
 ### 開発環境でのインストール
+
+#### uvを使った簡単セットアップ（推奨）
 ```bash
 # リポジトリをクローン
 git clone https://github.com/yourusername/thonny_local_ollama.git
 cd thonny_local_ollama
 
-# 仮想環境を作成
-python -m venv .venv
-.venv\Scripts\activate  # Windows
-# または
-source .venv/bin/activate  # macOS/Linux
+# uvをインストール（未インストールの場合）
+# Windows (PowerShell):
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+# Linux/macOS:
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 依存関係をインストール
-pip install -e .
+# 全ての依存関係をインストール（llama-cpp-python含む）
+uv sync --all-extras
+
+# または開発用依存関係のみインストール
+uv sync --extra dev
+
+# 仮想環境をアクティベート
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # macOS/Linux
+```
+
+#### セットアップスクリプトを使用
+```bash
+# ガイド付きインストール
+python setup_dev.py
 ```
 
 ### llama-cpp-pythonのインストール
 
-CPU版：
+llama-cpp-pythonは`uv sync --extra dev`を実行すると自動的にインストールされます。
+
+手動インストールや異なる計算バックエンドの場合：
+
+**CPU版（デフォルト）**：
 ```bash
-pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 ```
 
-CUDA版：
+**CUDA版**：
 ```bash
-pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+```
+
+**Metal版（macOS）**：
+```bash
+CMAKE_ARGS="-DLLAMA_METAL=on" uv pip install llama-cpp-python
 ```
 
 ## モデルのセットアップ
@@ -62,14 +88,42 @@ huggingface-cli download TheBloke/Llama-3-8B-GGUF llama3-8b.Q4_K_M.gguf --local-
 ## 使い方
 
 1. **Thonnyを起動** - プラグインが自動的に読み込まれます
-2. **モデルの読み込み** - 設定されたGGUFモデルが初回使用時に読み込まれます（遅延読み込み）
+2. **モデルの設定**：
+   - 設定 → LLMアシスタント設定を開く
+   - ローカルモデルまたは外部APIを選択
+   - ローカルモデルの場合：GGUFファイルを選択するか推奨モデルをダウンロード
+   - 外部APIの場合：APIキーとモデル名を入力
 3. **コード解説**：
    - エディタでコードを選択
-   - 右クリックして「コード解説」を選択
+   - 右クリックして「選択範囲を説明」を選択
+   - AIがスキルレベルに応じてコードを解説
 4. **コード生成**：
-   - AIアシスタントパネルを開く
-   - 自然言語でリクエストを入力
-   - AIが指示に基づいてコードを生成
+   - 実装したい内容をコメントで記述
+   - 右クリックして「コメントから生成」を選択
+   - またはAIアシスタントパネルでインタラクティブにチャット
+5. **エラー修正**：
+   - エラーが発生したら、アシスタントパネルの「エラーを説明」をクリック
+   - AIがエラーを分析して修正案を提示
+
+### 外部APIの設定
+
+#### ChatGPT
+1. [OpenAI](https://platform.openai.com/)からAPIキーを取得
+2. 設定で「chatgpt」をプロバイダーとして選択
+3. APIキーを入力
+4. モデルを選択（例：gpt-3.5-turbo、gpt-4）
+
+#### Ollama
+1. [Ollama](https://ollama.ai/)をインストールして実行
+2. 設定で「ollama」をプロバイダーとして選択
+3. ベースURLを設定（デフォルト：http://localhost:11434）
+4. インストール済みモデルを選択（例：llama3、mistral）
+
+#### OpenRouter
+1. [OpenRouter](https://openrouter.ai/)からAPIキーを取得
+2. 設定で「openrouter」をプロバイダーとして選択
+3. APIキーを入力
+4. モデルを選択（無料モデルも利用可能）
 
 ## 開発
 
@@ -103,11 +157,11 @@ python -m debugpy --listen 5678 --wait-for-client -m thonny
 
 プラグインはThonnyの設定システムに設定を保存します。以下の項目を設定できます：
 
-- モデルのパスと選択
-- ユーザーのスキルレベル（初心者/中級者/上級者）
-- 外部サービス用のオプションAPIエンドポイント
-- コンテキストウィンドウサイズ
-- 生成パラメータ（temperature、最大トークン数など）
+- **プロバイダー選択**: ローカルモデルまたは外部API（ChatGPT、Ollama、OpenRouter）
+- **モデル設定**: モデルパス、コンテキストサイズ、生成パラメータ
+- **ユーザー設定**: スキルレベル（初心者/中級者/上級者）
+- **システムプロンプト**: コーディング重視、解説重視、またはカスタムプロンプトから選択
+- **生成パラメータ**: temperature、最大トークン数など
 
 ## 必要要件
 
@@ -144,12 +198,19 @@ python -m debugpy --listen 5678 --wait-for-client -m thonny
 ## ロードマップ
 
 - [x] 初期プロジェクトセットアップ
-- [ ] 基本的なプラグイン構造
-- [ ] llama-cpp-pythonとのLLM統合
-- [ ] コード解説用コンテキストメニュー
-- [ ] コード生成インターフェース
-- [ ] 複数ファイルのコンテキストサポート
-- [ ] 設定UI
+- [x] uvを使用した開発環境
+- [x] 基本的なプラグイン構造
+- [x] llama-cpp-pythonとのLLM統合
+- [x] チャットパネルUI（右側）
+- [x] コード解説用コンテキストメニュー
+- [x] コメントからのコード生成
+- [x] エラー修正支援
+- [x] 設定UI
+- [x] 複数ファイルのコンテキストサポート
+- [x] モデルダウンロードマネージャー
+- [x] 外部API対応（ChatGPT、Ollama、OpenRouter）
+- [x] カスタマイズ可能なシステムプロンプト
+- [ ] インラインコード補完
 - [ ] USBポータブルパッケージング
 - [ ] PyPIリリース
 
@@ -157,7 +218,7 @@ python -m debugpy --listen 5678 --wait-for-client -m thonny
 
 このプロジェクトの詳細な目標：
 
-1. **モデル読み込みの最適化**
+1. **効率的なモデル読み込み**
    - 初回使用時にLLMモデルを読み込む（起動時ではなく）
    - 数GBのモデルでも起動時間に影響しない
    - バックグラウンドでの非同期読み込みによりUIをブロックしない

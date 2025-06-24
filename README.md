@@ -10,7 +10,9 @@ A Thonny IDE plugin that integrates local LLM capabilities using llama-cpp-pytho
 - 💡 **Code Explanation**: Select code and get AI-powered explanations via context menu
 - 🎯 **Context-Aware**: Understands multiple files and project context
 - 🎚️ **Skill Level Adaptation**: Adjusts responses based on user's programming skill level
-- 🔌 **Optional External APIs**: Support for ChatGPT, Ollama server, and OpenRouter as alternatives
+- 🔌 **External API Support**: Optional support for ChatGPT, Ollama server, and OpenRouter as alternatives
+- 📥 **Model Download Manager**: Built-in download manager for recommended models
+- 🎨 **Customizable System Prompts**: Tailor AI behavior with custom system prompts
 - 💾 **USB Portable**: Can be bundled with Thonny and models for portable use
 
 ## Installation
@@ -21,31 +23,55 @@ pip install thonny-ollama
 ```
 
 ### Development Installation
+
+#### Quick Setup with uv (Recommended)
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/thonny_local_ollama.git
 cd thonny_local_ollama
 
-# Create virtual environment
-python -m venv .venv
-.venv\Scripts\activate  # Windows
-# or
-source .venv/bin/activate  # macOS/Linux
+# Install uv if not already installed
+# Windows (PowerShell):
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+# Linux/macOS:
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install dependencies
-pip install -e .
+# Install all dependencies (including llama-cpp-python)
+uv sync --all-extras
+
+# Or install with development dependencies only
+uv sync --extra dev
+
+# Activate virtual environment
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # macOS/Linux
+```
+
+#### Alternative Setup Script
+```bash
+# Use the setup script for guided installation
+python setup_dev.py
 ```
 
 ### Installing llama-cpp-python
 
-For CPU support:
+llama-cpp-python is automatically installed when you run `uv sync --extra dev`.
+
+For manual installation or different compute backends:
+
+**CPU support (default)**:
 ```bash
-pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 ```
 
-For CUDA support:
+**CUDA support**:
 ```bash
-pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+```
+
+**Metal support (macOS)**:
+```bash
+CMAKE_ARGS="-DLLAMA_METAL=on" uv pip install llama-cpp-python
 ```
 
 ## Model Setup
@@ -62,14 +88,42 @@ huggingface-cli download TheBloke/Llama-3-8B-GGUF llama3-8b.Q4_K_M.gguf --local-
 ## Usage
 
 1. **Start Thonny** - The plugin will load automatically
-2. **Model Loading** - The configured GGUF model loads on first use (lazy loading)
+2. **Model Setup**:
+   - Open Settings → LLM Assistant Settings
+   - Choose between local models or external APIs
+   - For local models: Select a GGUF file or download recommended models
+   - For external APIs: Enter your API key and model name
 3. **Code Explanation**:
    - Select code in the editor
-   - Right-click and choose "Code Explanation"
+   - Right-click and choose "Explain Selection"
+   - The AI will explain the code based on your skill level
 4. **Code Generation**:
-   - Open the AI Assistant panel
-   - Type your request in natural language
-   - The AI will generate code based on your instructions
+   - Write a comment describing what you want
+   - Right-click and choose "Generate from Comment"
+   - Or use the AI Assistant panel for interactive chat
+5. **Error Fixing**:
+   - When you encounter an error, click "Explain Error" in the assistant panel
+   - The AI will analyze the error and suggest fixes
+
+### External API Configuration
+
+#### ChatGPT
+1. Get an API key from [OpenAI](https://platform.openai.com/)
+2. In settings, select "chatgpt" as provider
+3. Enter your API key
+4. Choose model (e.g., gpt-3.5-turbo, gpt-4)
+
+#### Ollama
+1. Install and run [Ollama](https://ollama.ai/)
+2. In settings, select "ollama" as provider
+3. Set base URL (default: http://localhost:11434)
+4. Choose installed model (e.g., llama3, mistral)
+
+#### OpenRouter
+1. Get an API key from [OpenRouter](https://openrouter.ai/)
+2. In settings, select "openrouter" as provider
+3. Enter your API key
+4. Choose model (free models available)
 
 ## Development
 
@@ -88,26 +142,32 @@ thonny_local_ollama/
 └── README.md
 ```
 
-### Running Tests
+### Running in Development Mode
 ```bash
-pytest -v
+# Normal mode
+python run_dev.py
+
+# Debug mode (for VS Code/PyCharm attachment)
+python run_dev.py --debug
+
+# Quick run with uv
+uv run thonny
 ```
 
-### Debugging
+### Running Tests
 ```bash
-# Run Thonny with debugpy support
-python -m debugpy --listen 5678 --wait-for-client -m thonny
+uv run pytest -v
 ```
 
 ## Configuration
 
 The plugin stores its configuration in Thonny's settings system. You can configure:
 
-- Model path and selection
-- User skill level (beginner/intermediate/advanced)
-- Optional API endpoints for external services
-- Context window size
-- Generation parameters (temperature, max tokens, etc.)
+- **Provider Selection**: Local models or external APIs (ChatGPT, Ollama, OpenRouter)
+- **Model Settings**: Model path, context size, generation parameters
+- **User Preferences**: Skill level (beginner/intermediate/advanced)
+- **System Prompts**: Choose between coding-focused, explanation-focused, or custom prompts
+- **Generation Parameters**: Temperature, max tokens, etc.
 
 ## Requirements
 
@@ -116,6 +176,7 @@ The plugin stores its configuration in Thonny's settings system. You can configu
 - llama-cpp-python
 - 4GB+ RAM (depending on model size)
 - 5-10GB disk space for models
+- uv (for development)
 
 ## Contributing
 
@@ -144,12 +205,19 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Roadmap
 
 - [x] Initial project setup
-- [ ] Basic plugin structure
-- [ ] LLM integration with llama-cpp-python
-- [ ] Context menu for code explanation
-- [ ] Code generation interface
-- [ ] Multi-file context support
-- [ ] Configuration UI
+- [x] Development environment with uv
+- [x] Basic plugin structure
+- [x] LLM integration with llama-cpp-python
+- [x] Chat panel UI (right side)
+- [x] Context menu for code explanation
+- [x] Code generation from comments
+- [x] Error fixing assistance
+- [x] Configuration UI
+- [x] Multi-file context support
+- [x] Model download manager
+- [x] External API support (ChatGPT, Ollama, OpenRouter)
+- [x] Customizable system prompts
+- [ ] Inline code completion
 - [ ] USB portable packaging
 - [ ] PyPI release
 

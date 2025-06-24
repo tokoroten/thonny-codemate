@@ -5,23 +5,23 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 
 ## High Priority Tasks
 
-- [ ] Create basic project structure with pyproject.toml
-- [ ] Implement thonnycontrib package structure with __init__.py
-- [ ] Create llm_client.py for llama-cpp-python integration
-- [ ] Implement basic load_plugin() function
-- [ ] Create chat panel UI on the right side (like GitHub Copilot)
-- [ ] Implement context menu for 'Code Explanation'
+- [x] Create basic project structure with pyproject.toml (2025-06-24完了)
+- [x] Implement thonnycontrib package structure with __init__.py (2025-06-24完了)
+- [x] Create llm_client.py for llama-cpp-python integration (2025-06-24完了)
+- [x] Implement basic load_plugin() function (2025-06-24完了)
+- [x] Create chat panel UI on the right side (like GitHub Copilot) (2025-06-24完了)
+- [x] Implement context menu for 'Code Explanation' (2025-06-24完了)
 
 ## Medium Priority Tasks
 
-- [ ] Add configuration management (config.py)
-- [ ] Implement lazy model loading (load on first use, not at startup)
+- [x] Add configuration management (settings_dialog.py) (2025-06-24完了)
+- [x] Implement lazy model loading (load on first use, not at startup) (2025-06-24完了)
 - [ ] Add error fixing assistance feature
 - [ ] Create tests directory and basic unit tests
 
 ## Low Priority Tasks
 
-- [ ] Add user skill level selection feature
+- [x] Add user skill level selection feature (2025-06-24完了)
 - [ ] Implement multi-file context understanding
 - [ ] Add support for external APIs (ChatGPT/Ollama/OpenRouter)
 - [ ] Implement inline code completion (cursor position)

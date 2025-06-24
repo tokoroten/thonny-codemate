@@ -105,6 +105,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.venv2/
 env/
 venv/
 ENV/
@@ -153,3 +154,7 @@ thonny.log*
 # OS specific
 .DS_Store
 Thumbs.db
+
+# uv
+.python-version
+uv.lock

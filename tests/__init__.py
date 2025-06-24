@@ -1,0 +1,1 @@
+# Tests for Thonny Local LLM Plugin
