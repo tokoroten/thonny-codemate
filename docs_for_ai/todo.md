@@ -9,21 +9,22 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 - [ ] Implement thonnycontrib package structure with __init__.py
 - [ ] Create llm_client.py for llama-cpp-python integration
 - [ ] Implement basic load_plugin() function
+- [ ] Create chat panel UI on the right side (like GitHub Copilot)
+- [ ] Implement context menu for 'Code Explanation'
 
 ## Medium Priority Tasks
 
-- [ ] Create ui_widgets.py for Thonny UI components
-- [ ] Implement context menu for 'Code Explanation'
 - [ ] Add configuration management (config.py)
-- [ ] Implement model downloading functionality
-- [ ] Add async model loading on Thonny startup
+- [ ] Implement lazy model loading (load on first use, not at startup)
+- [ ] Add error fixing assistance feature
+- [ ] Create tests directory and basic unit tests
 
 ## Low Priority Tasks
 
-- [ ] Create tests directory and basic unit tests
 - [ ] Add user skill level selection feature
 - [ ] Implement multi-file context understanding
 - [ ] Add support for external APIs (ChatGPT/Ollama/OpenRouter)
+- [ ] Implement inline code completion (cursor position)
 - [ ] Create USB portable deployment configuration
 - [ ] Prepare PyPI package and publish
 
