@@ -119,15 +119,7 @@ class LLMChatView(ttk.Frame):
         button_frame = ttk.Frame(input_frame)
         button_frame.grid(row=1, column=0, sticky="ew")
         
-        # Ctrl+Enterのヒントラベル
-        hint_label = ttk.Label(
-            button_frame,
-            text="Ctrl+Enter to send",
-            foreground="gray",
-            font=("", 9)
-        )
-        hint_label.pack(side=tk.LEFT, padx=5)
-        
+        # send button        
         self.send_button = ttk.Button(
             button_frame,
             text="Send",
@@ -135,6 +127,16 @@ class LLMChatView(ttk.Frame):
             state=tk.DISABLED
         )
         self.send_button.pack(side=tk.RIGHT, padx=2)
+
+        # Ctrl+Enterのヒントラベル
+        hint_label = ttk.Label(
+            button_frame,
+            text="Ctrl+Enter to send",
+            foreground="gray",
+            font=("", 9)
+        )
+        hint_label.pack(side=tk.RIGHT, padx=5)
+        
         
         # プリセットボタン（幅を指定して文字が切れないようにする）
         ttk.Button(
