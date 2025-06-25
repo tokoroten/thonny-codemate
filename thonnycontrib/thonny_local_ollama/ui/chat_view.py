@@ -12,7 +12,14 @@ from typing import Optional
 
 from thonny import get_workbench
 
-logger = logging.getLogger(__name__)
+# 安全なロガーを使用
+try:
+    from .. import get_safe_logger
+    logger = get_safe_logger(__name__)
+except ImportError:
+    # フォールバック
+    logger = logging.getLogger(__name__)
+    logger.addHandler(logging.NullHandler())
 
 
 class LLMChatView(ttk.Frame):
@@ -31,6 +38,8 @@ class LLMChatView(ttk.Frame):
         # メッセージキュー（スレッド間通信用）
         self.message_queue = queue.Queue()
         self._processing = False
+        self._first_token = True  # ストリーミング用のフラグ
+        self._stop_generation = False  # 生成を停止するフラグ
         
         # 定期的にキューをチェック
         self.after(100, self._process_queue)
@@ -46,6 +55,15 @@ class LLMChatView(ttk.Frame):
         header_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
         
         ttk.Label(header_frame, text="LLM Assistant", font=("", 12, "bold")).pack(side=tk.LEFT)
+        
+        # Clearボタン
+        self.clear_button = ttk.Button(
+            header_frame,
+            text="Clear",
+            command=self._clear_chat,
+            width=8
+        )
+        self.clear_button.pack(side=tk.LEFT, padx=10)
         
         # 設定ボタン
         self.settings_button = ttk.Button(
@@ -101,33 +119,31 @@ class LLMChatView(ttk.Frame):
         button_frame = ttk.Frame(input_frame)
         button_frame.grid(row=1, column=0, sticky="ew")
         
+        # Ctrl+Enterのヒントラベル
+        hint_label = ttk.Label(
+            button_frame,
+            text="Ctrl+Enter to send",
+            foreground="gray",
+            font=("", 9)
+        )
+        hint_label.pack(side=tk.LEFT, padx=5)
+        
         self.send_button = ttk.Button(
             button_frame,
             text="Send",
-            command=self._send_message,
+            command=self._handle_send_button,
             state=tk.DISABLED
         )
         self.send_button.pack(side=tk.RIGHT, padx=2)
         
-        self.clear_button = ttk.Button(
-            button_frame,
-            text="Clear",
-            command=self._clear_chat
-        )
-        self.clear_button.pack(side=tk.RIGHT, padx=2)
-        
-        # プリセットボタン
+        # プリセットボタン（幅を指定して文字が切れないようにする）
         ttk.Button(
             button_frame,
             text="Explain Error",
-            command=self._explain_last_error
+            command=self._explain_last_error,
+            width=15  # 幅を指定
         ).pack(side=tk.LEFT, padx=2)
         
-        ttk.Button(
-            button_frame,
-            text="Generate Code",
-            command=self._show_code_generator
-        ).pack(side=tk.LEFT, padx=2)
         
         # コンテキストボタン
         self.context_var = tk.BooleanVar(value=False)
@@ -143,8 +159,11 @@ class LLMChatView(ttk.Frame):
         self.context_manager = None
         
         # キーバインディング
-        self.input_text.bind("<Control-Return>", lambda e: self._send_message())
+        self.input_text.bind("<Control-Return>", lambda e: self._handle_send_button())
         self.input_text.bind("<Shift-Return>", lambda e: "break")  # 改行を許可
+        
+        # Escapeキーで生成を停止
+        self.bind_all("<Escape>", lambda e: self._stop_if_processing())
     
     def _init_llm(self):
         """LLMクライアントを初期化"""
@@ -253,10 +272,28 @@ class LLMChatView(ttk.Frame):
         self.chat_display.see(tk.END)
         self.chat_display.config(state=tk.DISABLED)
     
+    def _handle_send_button(self):
+        """送信/停止ボタンのハンドラー"""
+        if self._processing:
+            # 生成中の場合は停止
+            self._stop_generation = True
+            self.send_button.config(text="Stopping...")
+            self._append_message("System", "Stopping generation...", "info")
+        else:
+            # 通常の送信処理
+            self._send_message()
+    
+    def _stop_if_processing(self):
+        """処理中の場合は生成を停止"""
+        if self._processing:
+            self._stop_generation = True
+            self.send_button.config(text="Stopping...")
+            self._append_message("System", "Stopping generation... (ESC pressed)", "info")
+    
     def _send_message(self):
         """メッセージを送信"""
         message = self.input_text.get("1.0", tk.END).strip()
-        if not message or self._processing:
+        if not message:
             return
         
         # UIをクリア
@@ -265,7 +302,9 @@ class LLMChatView(ttk.Frame):
         
         # 処理中フラグ
         self._processing = True
-        self.send_button.config(state=tk.DISABLED)
+        self._first_token = True  # ストリーミング用フラグをリセット
+        self._stop_generation = False  # 停止フラグをリセット
+        self.send_button.config(text="Stop", state=tk.NORMAL)  # ボタンを停止モードに変更
         
         # バックグラウンドで処理
         thread = threading.Thread(
@@ -280,13 +319,46 @@ class LLMChatView(ttk.Frame):
         try:
             # コンテキストを含める場合
             if self.context_var.get() and self.context_manager:
-                contexts = self.context_manager.get_project_context()
-                if contexts:
-                    context_str = self.context_manager.format_context_for_llm(contexts)
-                    # コンテキストサマリーをUIに表示
-                    summary = self.context_manager.get_context_summary()
-                    self.message_queue.put(("info", f"Using context from {summary['total_files']} files"))
+                # 現在のエディタのファイルパスを取得
+                workbench = get_workbench()
+                editor = workbench.get_editor_notebook().get_current_editor()
+                current_file = None
+                selected_text = None
+                selection_info = None
+                
+                if editor:
+                    current_file = editor.get_filename()
+                    text_widget = editor.get_text_widget()
                     
+                    # 選択範囲があるかチェック
+                    if text_widget.tag_ranges("sel"):
+                        selected_text = text_widget.get("sel.first", "sel.last")
+                        # 選択範囲の行番号を取得
+                        start_line = int(text_widget.index("sel.first").split(".")[0])
+                        end_line = int(text_widget.index("sel.last").split(".")[0])
+                        selection_info = f"Selected lines: {start_line}-{end_line}"
+                
+                if selected_text:
+                    # 選択範囲がある場合はそれをコンテキストとして使用
+                    context_str = f"""File: {Path(current_file).name if current_file else 'Unknown'}
+{selection_info}
+
+```python
+{selected_text}
+```"""
+                    self.message_queue.put(("info", f"Using selected text as context ({selection_info})"))
+                else:
+                    # 選択範囲がない場合は全ファイルをコンテキストとして使用
+                    contexts = self.context_manager.get_project_context(current_file)
+                    if contexts:
+                        context_str = self.context_manager.format_context_for_llm(contexts)
+                        # コンテキストサマリーをUIに表示
+                        summary = self.context_manager.get_context_summary()
+                        self.message_queue.put(("info", f"Using entire file as context"))
+                    else:
+                        context_str = None
+                
+                if context_str:
                     # コンテキスト付きで生成
                     full_prompt = f"""Here is the context from the current project:
 
@@ -295,14 +367,23 @@ class LLMChatView(ttk.Frame):
 Based on this context, {message}"""
                     
                     for token in self.llm_client.generate_stream(full_prompt):
+                        if self._stop_generation:
+                            self.message_queue.put(("info", "\n[Generation stopped by user]"))
+                            break
                         self.message_queue.put(("token", token))
                 else:
                     # 通常の生成
                     for token in self.llm_client.generate_stream(message):
+                        if self._stop_generation:
+                            self.message_queue.put(("info", "\n[Generation stopped by user]"))
+                            break
                         self.message_queue.put(("token", token))
             else:
                 # 通常の生成
                 for token in self.llm_client.generate_stream(message):
+                    if self._stop_generation:
+                        self.message_queue.put(("info", "\n[Generation stopped by user]"))
+                        break
                     self.message_queue.put(("token", token))
             
             # 完了
@@ -316,16 +397,18 @@ Based on this context, {message}"""
         """メッセージキューを処理"""
         try:
             # キューから全てのメッセージを処理
-            first_token = True
             while True:
                 msg_type, content = self.message_queue.get_nowait()
                 
                 if msg_type == "token":
-                    if first_token:
-                        self._append_message("Assistant", "", "assistant")
-                        first_token = False
+                    if self._first_token:
+                        # 最初のトークンの時だけAssistantラベルを追加
+                        self.chat_display.config(state=tk.NORMAL)
+                        self.chat_display.insert(tk.END, "\nAssistant: ", "role")
+                        self.chat_display.config(state=tk.DISABLED)
+                        self._first_token = False
                     
-                    # トークンを追加
+                    # トークンを追加（ラベルなしで）
                     self.chat_display.config(state=tk.NORMAL)
                     self.chat_display.insert(tk.END, content, "assistant")
                     self.chat_display.see(tk.END)
@@ -333,18 +416,20 @@ Based on this context, {message}"""
                 
                 elif msg_type == "complete":
                     self._processing = False
-                    self.send_button.config(state=tk.NORMAL)
-                    first_token = True
+                    self._stop_generation = False  # 停止フラグをリセット
+                    self.send_button.config(text="Send", state=tk.NORMAL)  # ボタンを送信モードに戻す
+                    self._first_token = True  # 次のメッセージ用にリセット
                 
                 elif msg_type == "error":
                     self._append_message("System", f"Error: {content}", "error")
                     self._processing = False
-                    self.send_button.config(state=tk.NORMAL)
-                    first_token = True
+                    self._stop_generation = False  # 停止フラグをリセット
+                    self.send_button.config(text="Send", state=tk.NORMAL)  # ボタンを送信モードに戻す
+                    self._first_token = True  # 次のメッセージ用にリセット
                 
                 elif msg_type == "info":
                     self._append_message("System", content, "assistant")
-                    first_token = True
+                    self._first_token = True  # 次のメッセージ用にリセット
         
         except queue.Empty:
             pass
@@ -431,29 +516,6 @@ Based on this context, {message}"""
             logger.error(f"Error in _explain_last_error: {e}")
             messagebox.showerror("Error", f"Failed to get error information: {str(e)}")
     
-    def _show_code_generator(self):
-        """コード生成ダイアログを表示"""
-        # 簡単なプロンプト入力ダイアログ
-        dialog = tk.Toplevel(self)
-        dialog.title("Generate Code")
-        dialog.geometry("400x200")
-        
-        ttk.Label(dialog, text="What code do you want to generate?").pack(pady=5)
-        
-        prompt_text = tk.Text(dialog, height=5, width=50)
-        prompt_text.pack(padx=10, pady=5)
-        prompt_text.insert("1.0", "# Write a function that ")
-        
-        def generate():
-            prompt = prompt_text.get("1.0", tk.END).strip()
-            if prompt:
-                self.input_text.delete("1.0", tk.END)
-                self.input_text.insert("1.0", f"Generate Python code for: {prompt}")
-                self._send_message()
-            dialog.destroy()
-        
-        ttk.Button(dialog, text="Generate", command=generate).pack(pady=5)
-    
     def _show_settings(self):
         """設定ダイアログを表示"""
         from .settings_dialog import SettingsDialog
@@ -479,14 +541,57 @@ Based on this context, {message}"""
                 from ..context_manager import ContextManager
                 self.context_manager = ContextManager()
             
-            # コンテキストサマリーを表示
-            summary = self.context_manager.get_context_summary()
-            if summary['current_file']:
+            # 現在のエディタ情報を取得
+            workbench = get_workbench()
+            editor = workbench.get_editor_notebook().get_current_editor()
+            current_file = None
+            selected_range = None
+            
+            if editor:
+                current_file = editor.get_filename()
+                text_widget = editor.get_text_widget()
+                
+                # 選択範囲があるかチェック
+                if text_widget.tag_ranges("sel"):
+                    start_line = int(text_widget.index("sel.first").split(".")[0])
+                    end_line = int(text_widget.index("sel.last").split(".")[0])
+                    selected_range = f"lines {start_line}-{end_line}"
+            
+            # コンテキストを取得（現在のファイルのみなので高速）
+            try:
+                if current_file:
+                    file_info = f"Current file: {Path(current_file).name}"
+                    
+                    if selected_range:
+                        self._append_message(
+                            "System",
+                            f"Context enabled for selected text\n"
+                            f"{file_info} - {selected_range}",
+                            "assistant"
+                        )
+                    else:
+                        contexts = self.context_manager.get_project_context(current_file)
+                        summary = self.context_manager.get_context_summary()
+                        
+                        self._append_message(
+                            "System",
+                            f"Context enabled for current file\n"
+                            f"{file_info} - {summary['total_classes']} classes, {summary['total_functions']} functions",
+                            "assistant"
+                        )
+                else:
+                    self._append_message(
+                        "System",
+                        "Context enabled but no file is currently open",
+                        "assistant"
+                    )
+                    
+            except Exception as e:
+                logger.error(f"Error analyzing context: {e}")
                 self._append_message(
                     "System",
-                    f"Context enabled: {summary['total_files']} files, "
-                    f"{summary['total_classes']} classes, {summary['total_functions']} functions",
-                    "assistant"
+                    f"Error analyzing context: {str(e)}",
+                    "error"
                 )
         else:
             self._append_message("System", "Context disabled", "assistant")

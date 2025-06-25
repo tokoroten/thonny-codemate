@@ -48,7 +48,8 @@ class SettingsDialog(tk.Toplevel):
         ttk.Button(
             main_frame,
             text="Browse...",
-            command=self._browse_model
+            command=self._browse_model,
+            width=15
         ).grid(row=1, column=2, padx=(5, 0), pady=5)
         
         # コンテキストサイズ
@@ -197,7 +198,8 @@ class SettingsDialog(tk.Toplevel):
         ttk.Button(
             main_frame,
             text="Edit Custom Prompt",
-            command=self._edit_custom_prompt
+            command=self._edit_custom_prompt,
+            width=22
         ).grid(row=15, column=0, columnspan=2, sticky="w", pady=5)
         
         # ボタンフレーム
@@ -207,25 +209,29 @@ class SettingsDialog(tk.Toplevel):
         ttk.Button(
             button_frame,
             text="Save",
-            command=self._save_settings
+            command=self._save_settings,
+            width=12
         ).pack(side=tk.RIGHT, padx=5)
         
         ttk.Button(
             button_frame,
             text="Cancel",
-            command=self.destroy
+            command=self.destroy,
+            width=12
         ).pack(side=tk.RIGHT)
         
         ttk.Button(
             button_frame,
             text="Test Model",
-            command=self._test_model
+            command=self._test_model,
+            width=18
         ).pack(side=tk.LEFT, padx=5)
         
         ttk.Button(
             button_frame,
             text="Download Models",
-            command=self._show_model_manager
+            command=self._show_model_manager,
+            width=18
         ).pack(side=tk.LEFT, padx=5)
     
     def _browse_model(self):

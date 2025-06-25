@@ -45,7 +45,8 @@ class ModelDownloadDialog(tk.Toplevel):
         ttk.Button(
             header_frame,
             text="Refresh",
-            command=self._refresh_model_list
+            command=self._refresh_model_list,
+            width=12
         ).pack(side=tk.RIGHT, padx=5)
         
         # モデルリストフレーム（スクロール可能）
@@ -83,7 +84,8 @@ class ModelDownloadDialog(tk.Toplevel):
         ttk.Button(
             main_frame,
             text="Close",
-            command=self.destroy
+            command=self.destroy,
+            width=12
         ).grid(row=3, column=0, pady=(10, 0))
     
     def _refresh_model_list(self):
@@ -138,7 +140,8 @@ class ModelDownloadDialog(tk.Toplevel):
             use_button = ttk.Button(
                 status_frame,
                 text="Use This Model",
-                command=lambda: self._use_model(model)
+                command=lambda: self._use_model(model),
+                width=18
             )
             use_button.pack(side=tk.LEFT, padx=5)
             
@@ -146,7 +149,8 @@ class ModelDownloadDialog(tk.Toplevel):
             delete_button = ttk.Button(
                 status_frame,
                 text="Delete",
-                command=lambda: self._delete_model(model)
+                command=lambda: self._delete_model(model),
+                width=12
             )
             delete_button.pack(side=tk.RIGHT)
             
@@ -179,7 +183,8 @@ class ModelDownloadDialog(tk.Toplevel):
             download_button = ttk.Button(
                 status_frame,
                 text="Download",
-                command=lambda: self._download_model(model)
+                command=lambda: self._download_model(model),
+                width=15
             )
             download_button.pack(side=tk.LEFT, padx=5)
     

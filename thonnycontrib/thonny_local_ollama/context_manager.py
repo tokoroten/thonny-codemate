@@ -38,13 +38,13 @@ class ContextManager:
     
     def get_project_context(self, current_file: Optional[str] = None) -> List[FileContext]:
         """
-        現在のプロジェクトのコンテキストを取得
+        現在のプロジェクトのコンテキストを取得（現在のファイルのみ）
         
         Args:
             current_file: 現在編集中のファイルパス
             
         Returns:
-            関連ファイルのコンテキストリスト
+            現在のファイルのコンテキストリスト
         """
         contexts = []
         
@@ -58,22 +58,12 @@ class ContextManager:
             return contexts
         
         current_path = Path(current_file)
-        project_root = self._find_project_root(current_path)
         
-        # 現在のファイルのコンテキストを追加
+        # 現在のファイルのコンテキストのみを追加
         current_context = self._analyze_file(current_path)
         if current_context:
             current_context.is_current = True
             contexts.append(current_context)
-        
-        # 関連ファイルを検索
-        related_files = self._find_related_files(current_path, project_root)
-        
-        # 関連ファイルのコンテキストを追加（最大数まで）
-        for file_path in related_files[:self.max_files - 1]:
-            context = self._analyze_file(file_path)
-            if context:
-                contexts.append(context)
         
         return contexts
     
@@ -106,18 +96,40 @@ class ContextManager:
         except Exception as e:
             logger.warning(f"Failed to parse imports from {current_file}: {e}")
         
-        # プロジェクト内のPythonファイルを検索
-        for py_file in project_root.rglob("*.py"):
-            if py_file == current_file:
-                continue
+        # プロジェクト内のPythonファイルを検索（深さ制限付き）
+        max_depth = 3  # 最大3階層まで
+        processed_count = 0
+        max_files_to_check = 100  # 最大100ファイルまでチェック
+        
+        def find_python_files(path: Path, depth: int = 0):
+            nonlocal processed_count
+            if depth > max_depth or processed_count > max_files_to_check:
+                return
             
-            # ファイルサイズチェック
-            if py_file.stat().st_size > self.max_file_size:
-                continue
-            
-            # __pycache__などを除外
-            if '__pycache__' in str(py_file) or '.venv' in str(py_file):
-                continue
+            try:
+                for item in path.iterdir():
+                    if processed_count > max_files_to_check:
+                        break
+                        
+                    # 除外するディレクトリ
+                    if item.is_dir():
+                        if item.name in ['__pycache__', '.venv', 'venv', '.git', 'node_modules', '.pytest_cache']:
+                            continue
+                        find_python_files(item, depth + 1)
+                    
+                    # Pythonファイルの処理
+                    elif item.suffix == '.py' and item != current_file:
+                        processed_count += 1
+                        
+                        # ファイルサイズチェック
+                        if item.stat().st_size > self.max_file_size:
+                            continue
+                        
+                        yield item
+            except PermissionError:
+                pass
+        
+        for py_file in find_python_files(project_root):
             
             # インポート関係をチェック
             try:

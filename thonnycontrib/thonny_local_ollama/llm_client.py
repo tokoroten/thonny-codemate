@@ -10,7 +10,13 @@ from pathlib import Path
 from typing import Optional, Iterator, Dict, Any, List
 from dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+# 安全なロガーを使用
+try:
+    from . import get_safe_logger
+    logger = get_safe_logger(__name__)
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.addHandler(logging.NullHandler())
 
 
 @dataclass

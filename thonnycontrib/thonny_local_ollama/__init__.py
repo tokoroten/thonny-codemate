@@ -3,9 +3,29 @@ Thonny Local LLM Plugin
 GitHub Copilot風のローカルLLM統合を提供するThonnyプラグイン
 """
 import logging
+import sys
 from typing import Optional
 
+# ログを完全に無効化（Thonny環境での問題を回避）
+import logging.config
+
+# ログ設定を完全に無効化
+logging.config.dictConfig({
+    'version': 1,
+    'disable_existing_loggers': True,
+    'handlers': {
+        'null': {
+            'class': 'logging.NullHandler',
+        },
+    },
+    'root': {
+        'handlers': ['null'],
+    },
+})
+
+# プラグイン用のロガー（何も出力しない）
 logger = logging.getLogger(__name__)
+logger.disabled = True
 
 # プラグインのバージョン
 __version__ = "0.1.0"
@@ -13,6 +33,34 @@ __version__ = "0.1.0"
 # グローバル変数でプラグインの状態を管理
 _plugin_loaded = False
 _llm_client: Optional['LLMClient'] = None
+
+
+def get_safe_logger(name: str) -> logging.Logger:
+    """
+    Thonny環境で安全に動作するロガーを取得
+    
+    Args:
+        name: ロガー名
+        
+    Returns:
+        設定済みのロガー
+    """
+    safe_logger = logging.getLogger(name)
+    safe_logger.setLevel(logging.INFO)
+    
+    # 既存のハンドラーがない場合のみ追加
+    if not safe_logger.handlers:
+        try:
+            if sys.stderr is not None and hasattr(sys.stderr, 'write'):
+                handler = logging.StreamHandler(sys.stderr)
+                handler.setFormatter(logging.Formatter('%(name)s - %(levelname)s - %(message)s'))
+                safe_logger.addHandler(handler)
+            else:
+                safe_logger.addHandler(logging.NullHandler())
+        except Exception:
+            safe_logger.addHandler(logging.NullHandler())
+    
+    return safe_logger
 
 
 def load_plugin():
@@ -23,14 +71,21 @@ def load_plugin():
     global _plugin_loaded, _llm_client
     
     if _plugin_loaded:
-        logger.warning("Plugin already loaded, skipping initialization")
+        try:
+            logger.warning("Plugin already loaded, skipping initialization")
+        except Exception:
+            pass
         return
     
     try:
         from thonny import get_workbench
         workbench = get_workbench()
         
-        logger.info("Loading Thonny Local LLM Plugin...")
+        try:
+            logger.info("Loading Thonny Local LLM Plugin...")
+        except Exception:
+            # ログ出力でエラーが発生しても続行
+            pass
         
         # UIコンポーネントを登録（エラーハンドリングを追加）
         try:
@@ -82,10 +137,20 @@ def load_plugin():
         workbench.set_default("llm.auto_load", False)
         
         _plugin_loaded = True
-        logger.info("Thonny Local LLM Plugin loaded successfully!")
+        try:
+            logger.info("Thonny Local LLM Plugin loaded successfully!")
+        except Exception:
+            pass
         
     except Exception as e:
-        logger.error(f"Failed to load Thonny Local LLM Plugin: {e}", exc_info=True)
+        try:
+            logger.error(f"Failed to load Thonny Local LLM Plugin: {e}", exc_info=True)
+        except Exception:
+            # ログ出力でエラーが発生した場合は、少なくともプリントを試みる
+            try:
+                print(f"Failed to load Thonny Local LLM Plugin: {e}")
+            except Exception:
+                pass
         raise
 
 
