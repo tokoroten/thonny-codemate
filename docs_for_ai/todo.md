@@ -30,6 +30,7 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 - [x] Implement key binding changes and UI adjustments (2025-06-25完了)
 - [x] Add Copy and Insert buttons for code blocks (2025-06-26完了)
 - [x] Implement virtual DOM system to reduce flickering in HTML chat view (2025-06-26完了)
+- [x] Fix Copy/Insert buttons not clickable during message streaming (2025-06-26完了)
 
 ## Low Priority Tasks
 
@@ -41,6 +42,13 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 - [ ] Prepare PyPI package and publish
 
 ## Recent Updates (2025-06-26)
+
+### Button Click Fix During Message Streaming
+- Fixed issue where Copy/Insert buttons couldn't be clicked during message streaming
+- Replaced full HTML reload with partial DOM updates using JavaScript
+- Added `_update_last_message_js()` method for incremental updates
+- Reduced update interval from 500ms to 100ms for smoother streaming
+- Buttons now remain functional throughout the entire message generation process
 
 ### Virtual DOM Implementation for Flicker-Free Updates
 - Created `virtual_dom.py` to track DOM changes and generate minimal patches
