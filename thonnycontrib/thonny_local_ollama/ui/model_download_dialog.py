@@ -172,16 +172,39 @@ class ModelDownloadDialog(tk.Toplevel):
             # プログレスバー
             progress_bar = ttk.Progressbar(
                 status_frame,
-                mode='indeterminate',
-                length=200
+                mode='determinate',
+                length=200,
+                maximum=100
             )
             progress_bar.pack(side=tk.LEFT, padx=5)
-            progress_bar.start()
+            
+            # 詳細情報フレーム
+            detail_frame = ttk.Frame(model_frame)
+            detail_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5, 0))
+            
+            # 進捗詳細ラベル
+            progress_detail_label = ttk.Label(
+                detail_frame, 
+                text="Preparing download...",
+                font=("", 9)
+            )
+            progress_detail_label.pack(side=tk.LEFT)
+            
+            # 速度と残り時間ラベル
+            speed_eta_label = ttk.Label(
+                detail_frame,
+                text="",
+                font=("", 9),
+                foreground="gray"
+            )
+            speed_eta_label.pack(side=tk.RIGHT)
             
             self.model_widgets[model["key"]] = {
                 "frame": model_frame,
                 "status_label": status_label,
-                "progress_bar": progress_bar
+                "progress_bar": progress_bar,
+                "progress_detail_label": progress_detail_label,
+                "speed_eta_label": speed_eta_label
             }
             
         else:
@@ -273,9 +296,25 @@ class ModelDownloadDialog(tk.Toplevel):
             short_error = error_lines[0] if error_lines else "Unknown error"
             messagebox.showerror("Download Error", f"Failed to download {progress.model_name}:\n\n{short_error}", parent=self)
             self._refresh_model_list()
-        else:
-            # 進捗更新（現在は未実装）
-            pass
+        elif progress.status == "downloading":
+            # 進捗更新
+            if model_key in self.model_widgets:
+                widgets = self.model_widgets[model_key]
+                
+                # プログレスバーを更新
+                if "progress_bar" in widgets:
+                    widgets["progress_bar"]["value"] = progress.percentage
+                
+                # 詳細ラベルを更新
+                if "progress_detail_label" in widgets:
+                    widgets["progress_detail_label"]["text"] = f"{progress.size_str} ({progress.percentage:.1f}%)"
+                
+                # 速度と残り時間を更新
+                if "speed_eta_label" in widgets:
+                    if progress.speed > 0:
+                        widgets["speed_eta_label"]["text"] = f"{progress.speed_str} | ETA: {progress.eta_str}"
+                    else:
+                        widgets["speed_eta_label"]["text"] = "Connecting..."
     
     def _use_model(self, model: Dict):
         """モデルを使用"""

@@ -56,6 +56,14 @@ RECOMMENDED_MODELS = {
         "description": "Llama 3.1 8B - 高性能モデル。GPT-3.5相当の能力。",
         "languages": ["en", "multi"]
     },
+    "llama3-elyza-jp-8b": {
+        "name": "Llama-3-ELYZA-JP-8B-q4_k_m.gguf",
+        "repo_id": "elyza/Llama-3-ELYZA-JP-8B-GGUF",
+        "filename": "Llama-3-ELYZA-JP-8B-q4_k_m.gguf",
+        "size": "4.9GB",
+        "description": "Llama 3 ELYZA JP 8B - 日本語に特化した高性能モデル。",
+        "languages": ["ja", "en"]
+    },
     "llama3-13b": {
         "name": "Meta-Llama-3-13B-Instruct-Q4_K_M.gguf",
         "repo_id": "QuantFactory/Meta-Llama-3-13B-Instruct-GGUF",
@@ -74,6 +82,57 @@ class DownloadProgress:
     total: int
     status: str  # "downloading", "completed", "error"
     error_message: Optional[str] = None
+    speed: float = 0.0  # bytes per second
+    eta: int = 0  # estimated time remaining in seconds
+    
+    @property
+    def percentage(self) -> float:
+        """ダウンロード進捗率を取得"""
+        if self.total > 0:
+            return (self.downloaded / self.total) * 100
+        return 0.0
+        
+    @property
+    def speed_str(self) -> str:
+        """人間が読みやすい速度表示を取得"""
+        if self.speed < 1024:
+            return f"{self.speed:.0f} B/s"
+        elif self.speed < 1024 * 1024:
+            return f"{self.speed / 1024:.1f} KB/s"
+        else:
+            return f"{self.speed / (1024 * 1024):.1f} MB/s"
+    
+    @property
+    def eta_str(self) -> str:
+        """人間が読みやすい残り時間表示を取得"""
+        if self.eta <= 0:
+            return "Calculating..."
+        elif self.eta < 60:
+            return f"{self.eta}s"
+        elif self.eta < 3600:
+            return f"{self.eta // 60}m {self.eta % 60}s"
+        else:
+            hours = self.eta // 3600
+            minutes = (self.eta % 3600) // 60
+            return f"{hours}h {minutes}m"
+    
+    @property
+    def size_str(self) -> str:
+        """人間が読みやすいサイズ表示を取得"""
+        def format_size(size):
+            if size < 1024:
+                return f"{size} B"
+            elif size < 1024 * 1024:
+                return f"{size / 1024:.1f} KB"
+            elif size < 1024 * 1024 * 1024:
+                return f"{size / (1024 * 1024):.1f} MB"
+            else:
+                return f"{size / (1024 * 1024 * 1024):.2f} GB"
+        
+        if self.total > 0:
+            return f"{format_size(self.downloaded)} / {format_size(self.total)}"
+        else:
+            return format_size(self.downloaded)
 
 
 class ModelManager:
@@ -194,6 +253,7 @@ class ModelManager:
                     sys.stderr = io.StringIO()
                 
                 from huggingface_hub import hf_hub_download
+                from huggingface_hub.utils import tqdm as hf_tqdm
             except ImportError:
                 error_msg = "huggingface_hub is not installed. Please run: pip install huggingface-hub"
                 if progress_callback:
@@ -217,8 +277,66 @@ class ModelManager:
                 )
                 progress_callback(progress)
             
+            # 進捗追跡用の変数
+            import time
+            last_update_time = time.time()
+            last_downloaded = 0
+            
+            # カスタム進捗コールバック
+            def custom_progress_callback(progress_dict):
+                nonlocal last_update_time, last_downloaded
+                
+                if progress_callback and progress_dict:
+                    current_time = time.time()
+                    time_diff = current_time - last_update_time
+                    
+                    # 0.5秒ごとに更新（頻繁すぎる更新を防ぐ）
+                    if time_diff >= 0.5:
+                        downloaded = progress_dict.get("downloaded", 0)
+                        total = progress_dict.get("total", 0)
+                        
+                        # 速度計算
+                        if time_diff > 0:
+                            bytes_diff = downloaded - last_downloaded
+                            speed = bytes_diff / time_diff
+                        else:
+                            speed = 0
+                        
+                        # 残り時間計算
+                        if speed > 0 and total > downloaded:
+                            eta = int((total - downloaded) / speed)
+                        else:
+                            eta = 0
+                        
+                        progress = DownloadProgress(
+                            model_name=model_info["name"],
+                            downloaded=downloaded,
+                            total=total,
+                            status="downloading",
+                            speed=speed,
+                            eta=eta
+                        )
+                        progress_callback(progress)
+                        
+                        last_update_time = current_time
+                        last_downloaded = downloaded
+            
             # ダウンロード実行
             try:
+                # まずファイルが既に存在するかチェック
+                target_path = self.models_dir / model_info["filename"]
+                if target_path.exists():
+                    # 既に存在する場合は完了を通知
+                    if progress_callback:
+                        progress = DownloadProgress(
+                            model_name=model_info["name"],
+                            downloaded=100,
+                            total=100,
+                            status="completed"
+                        )
+                        progress_callback(progress)
+                    return
+                
                 # ロギング出力を一時的にキャプチャ
                 import io
                 import sys
@@ -226,15 +344,92 @@ class ModelManager:
                 sys.stderr = io.StringIO()
                 
                 try:
-                    # 単一ファイルのダウンロード
-                    downloaded_path = hf_hub_download(
-                        repo_id=model_info["repo_id"],
-                        filename=model_info["filename"],
-                        local_dir=str(self.models_dir),
-                        force_download=False,  # 既存ファイルがあればスキップ
-                        resume_download=True,  # 中断されたダウンロードを再開
-                        local_dir_use_symlinks=False  # シンボリックリンクを使わない
-                    )
+                    # URLベースのダウンロードを実装
+                    import urllib.request
+                    import tempfile
+                    import shutil
+                    
+                    # Hugging Face URLを構築
+                    base_url = f"https://huggingface.co/{model_info['repo_id']}/resolve/main/{model_info['filename']}"
+                    
+                    # 一時ファイルにダウンロード
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".gguf") as temp_file:
+                        temp_path = temp_file.name
+                    
+                    def download_with_progress(url, dest_path):
+                        """進捗表示付きダウンロード"""
+                        nonlocal last_update_time, last_downloaded
+                        
+                        response = urllib.request.urlopen(url)
+                        total_size = int(response.headers.get('Content-Length', 0))
+                        
+                        # 初期進捗を送信
+                        if progress_callback and total_size > 0:
+                            progress = DownloadProgress(
+                                model_name=model_info["name"],
+                                downloaded=0,
+                                total=total_size,
+                                status="downloading"
+                            )
+                            progress_callback(progress)
+                        
+                        block_size = 8192  # 8KB
+                        downloaded = 0
+                        last_update_time = time.time()
+                        last_downloaded = 0
+                        
+                        with open(dest_path, 'wb') as f:
+                            while True:
+                                buffer = response.read(block_size)
+                                if not buffer:
+                                    break
+                                
+                                f.write(buffer)
+                                downloaded += len(buffer)
+                                
+                                # 進捗を計算して送信
+                                current_time = time.time()
+                                time_diff = current_time - last_update_time
+                                
+                                if time_diff >= 0.5 and progress_callback:
+                                    speed = (downloaded - last_downloaded) / time_diff if time_diff > 0 else 0
+                                    eta = int((total_size - downloaded) / speed) if speed > 0 else 0
+                                    
+                                    progress = DownloadProgress(
+                                        model_name=model_info["name"],
+                                        downloaded=downloaded,
+                                        total=total_size,
+                                        status="downloading",
+                                        speed=speed,
+                                        eta=eta
+                                    )
+                                    progress_callback(progress)
+                                    
+                                    last_update_time = current_time
+                                    last_downloaded = downloaded
+                    
+                    try:
+                        # ダウンロード実行
+                        download_with_progress(base_url, temp_path)
+                        
+                        # 成功したら正式な場所に移動
+                        shutil.move(temp_path, str(target_path))
+                        
+                    except urllib.error.HTTPError:
+                        # Hugging Face APIが使えない場合は従来の方法にフォールバック
+                        if Path(temp_path).exists():
+                            Path(temp_path).unlink()
+                        
+                        # hf_hub_downloadを使用
+                        downloaded_path = hf_hub_download(
+                            repo_id=model_info["repo_id"],
+                            filename=model_info["filename"],
+                            local_dir=str(self.models_dir),
+                            force_download=False,
+                            resume_download=True,
+                            local_dir_use_symlinks=False
+                        )
+                    
                 finally:
                     # stderrを復元
                     sys.stderr = old_stderr

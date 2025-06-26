@@ -29,6 +29,7 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 - [x] Improve button sizes for better text display (2025-06-25完了)
 - [x] Implement key binding changes and UI adjustments (2025-06-25完了)
 - [x] Add Copy and Insert buttons for code blocks (2025-06-26完了)
+- [x] Implement virtual DOM system to reduce flickering in HTML chat view (2025-06-26完了)
 
 ## Low Priority Tasks
 
@@ -41,6 +42,13 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 
 ## Recent Updates (2025-06-26)
 
+### Virtual DOM Implementation for Flicker-Free Updates
+- Created `virtual_dom.py` to track DOM changes and generate minimal patches
+- Implemented `incremental_markdown_renderer.py` for rendering individual messages
+- Created `chat_view_html_vdom.py` with virtual DOM support
+- Reduced flickering during message streaming by updating only changed parts
+- Improved performance with rate-limited updates and smooth scrolling
+
 ### Markdown Rendering Implementation
 - Created `markdown_renderer.py` for converting markdown to HTML with syntax highlighting
 - Implemented `chat_view_html.py` using tkinterweb for rich text display
@@ -49,6 +57,7 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 - Added setting in preferences to toggle between HTML and text views
 
 ### Features Added
+- **Virtual DOM**: Incremental updates to reduce flickering during streaming
 - **Markdown Rendering**: Full markdown support with syntax highlighting using Pygments
 - **Code Block Buttons**: 
   - Copy button: Copies code to clipboard with fallback support
@@ -57,6 +66,9 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 - **User Choice**: Setting to choose between HTML (Markdown) and text views
 
 ### Technical Details
+- Virtual DOM system generates JavaScript patches for incremental updates
+- Message caching to avoid re-rendering unchanged content
+- JavaScript update queue for smooth, non-blocking updates
 - Uses `tkinterweb` for HTML rendering in Tkinter
 - Uses `markdown` library for Markdown to HTML conversion
 - Uses `pygments` for syntax highlighting with friendly theme
