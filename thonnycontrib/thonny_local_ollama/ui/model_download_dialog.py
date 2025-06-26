@@ -17,10 +17,11 @@ class ModelDownloadDialog(tk.Toplevel):
         super().__init__(parent)
         
         self.title("Model Manager")
-        self.geometry("600x400")
+        self.geometry("800x600")
         
         self.model_manager = ModelManager()
         self.model_widgets = {}
+        self._download_progress = {}  # ダウンロード進捗を追跡
         
         self._init_ui()
         self._refresh_model_list()
@@ -53,6 +54,7 @@ class ModelDownloadDialog(tk.Toplevel):
         list_frame = ttk.Frame(main_frame)
         list_frame.grid(row=1, column=0, sticky="nsew")
         list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
         
         # スクロールバー付きキャンバス
         canvas = tk.Canvas(list_frame, highlightthickness=0)
@@ -67,26 +69,29 @@ class ModelDownloadDialog(tk.Toplevel):
         canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
+        # マウスホイールのバインディング
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        def _on_enter(event):
+            # Windows
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            # Linux/macOS
+            canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
+            canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
+        
+        def _on_leave(event):
+            # バインディングを解除
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+        
+        # キャンバスにマウスが入った時/出た時のイベント
+        canvas.bind("<Enter>", _on_enter)
+        canvas.bind("<Leave>", _on_leave)
+        
         canvas.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
-        
-        # 説明
-        info_frame = ttk.Frame(main_frame)
-        info_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        
-        info_text = """推奨モデル:
-• 解説用モデル: コードの説明やエラー解説に最適化
-• コーディング用モデル: コード生成とリファクタリングに特化"""
-        
-        ttk.Label(info_frame, text=info_text, foreground="gray").pack()
-        
-        # 閉じるボタン
-        ttk.Button(
-            main_frame,
-            text="Close",
-            command=self.destroy,
-            width=12
-        ).grid(row=3, column=0, pady=(10, 0))
     
     def _refresh_model_list(self):
         """モデルリストを更新"""
@@ -121,8 +126,13 @@ class ModelDownloadDialog(tk.Toplevel):
         )
         desc_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
         
-        # サイズと用途
-        info_text = f"Size: {model['size']} | Purpose: {model['purpose']}"
+        # サイズと用途と言語
+        languages = model.get('languages', ['en'])
+        lang_text = ', '.join([
+            {'en': 'English', 'zh': 'Chinese', 'ja': 'Japanese', 'multi': 'Multilingual'}.get(lang, lang) 
+            for lang in languages
+        ])
+        info_text = f"Size: {model['size']} | Purpose: {model['purpose']} | Languages: {lang_text}"
         ttk.Label(model_frame, text=info_text, foreground="gray").grid(
             row=1, column=0, sticky="w"
         )
@@ -214,6 +224,9 @@ class ModelDownloadDialog(tk.Toplevel):
             # キューに追加（スレッドセーフ）
             progress_queue.put((model_key, progress))
         
+        # ダウンロード開始を記録
+        self._download_progress[model_key] = True
+        
         # キューをチェックする関数
         def check_progress_queue():
             has_items = False
@@ -246,9 +259,15 @@ class ModelDownloadDialog(tk.Toplevel):
     def _update_download_progress(self, model_key: str, progress: DownloadProgress):
         """ダウンロード進捗を更新"""
         if progress.status == "completed":
+            # ダウンロード完了時に追跡を削除
+            if model_key in self._download_progress:
+                del self._download_progress[model_key]
             messagebox.showinfo("Success", f"{progress.model_name} downloaded successfully!", parent=self)
             self._refresh_model_list()
         elif progress.status == "error":
+            # エラー時も追跡を削除
+            if model_key in self._download_progress:
+                del self._download_progress[model_key]
             messagebox.showerror("Error", f"Failed to download: {progress.error_message}", parent=self)
             self._refresh_model_list()
         else:

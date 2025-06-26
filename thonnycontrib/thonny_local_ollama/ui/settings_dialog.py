@@ -236,10 +236,25 @@ class SettingsDialog(tk.Toplevel):
     
     def _browse_model(self):
         """モデルファイルを選択"""
+        # 現在のパスからベースディレクトリを取得
+        current_path = self.model_path_var.get()
+        if current_path and Path(current_path).exists():
+            # ファイルの親ディレクトリを初期ディレクトリとする
+            initial_dir = str(Path(current_path).parent)
+        elif current_path and Path(current_path).parent.exists():
+            # パスが存在しなくても親ディレクトリが存在すれば使用
+            initial_dir = str(Path(current_path).parent)
+        else:
+            # デフォルトはモデルディレクトリまたはホーム
+            from ..model_manager import ModelManager
+            model_manager = ModelManager()
+            models_dir = model_manager.get_models_dir()
+            initial_dir = str(models_dir) if models_dir.exists() else str(Path.home())
+        
         filename = filedialog.askopenfilename(
             title="Select GGUF Model File",
             filetypes=[("GGUF files", "*.gguf"), ("All files", "*.*")],
-            initialdir=str(Path.home())
+            initialdir=initial_dir
         )
         if filename:
             self.model_path_var.set(filename)

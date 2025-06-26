@@ -13,13 +13,15 @@ logger = logging.getLogger(__name__)
 
 # 推奨モデルの定義
 RECOMMENDED_MODELS = {
+    # 2GB以下の軽量モデル
     "explanation": {
         "name": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
         "repo_id": "bartowski/Llama-3.2-1B-Instruct-GGUF",
         "filename": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
         "size": "0.8GB",
         "description": "軽量で高速な解説用モデル。初心者向けの分かりやすい説明が得意。",
-        "purpose": "explanation"
+        "purpose": "explanation",
+        "languages": ["en"]
     },
     "coding": {
         "name": "DeepSeek-Coder-1.3B-Instruct-Q4_K_M.gguf", 
@@ -27,7 +29,77 @@ RECOMMENDED_MODELS = {
         "filename": "DeepSeek-Coder-1.3B-Instruct-Q4_K_M.gguf",
         "size": "0.9GB",
         "description": "コード生成に特化したモデル。高品質なPythonコードを生成。",
-        "purpose": "coding"
+        "purpose": "coding",
+        "languages": ["en", "zh"]
+    },
+    
+    # 4GBクラスのモデル
+    "qwen2.5-coder-3b": {
+        "name": "Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
+        "repo_id": "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF",
+        "filename": "qwen2.5-coder-3b-instruct-q4_k_m.gguf",
+        "size": "2.3GB",
+        "description": "Qwen2.5 Coder 3B - 多言語対応のコーディングモデル。日本語・英語・中国語に対応。",
+        "purpose": "coding",
+        "languages": ["en", "zh", "ja", "multi"]
+    },
+    "codellama-7b": {
+        "name": "CodeLlama-7B-Instruct-Q4_K_M.gguf",
+        "repo_id": "TheBloke/CodeLlama-7B-Instruct-GGUF",
+        "filename": "codellama-7b-instruct.Q4_K_M.gguf",
+        "size": "4.1GB",
+        "description": "Meta社のCodeLlama 7B。高品質なコード生成が可能。",
+        "purpose": "coding",
+        "languages": ["en"]
+    },
+    
+    # 8GBクラスのモデル
+    "deepseek-coder-6.7b": {
+        "name": "DeepSeek-Coder-6.7B-Instruct-Q4_K_M.gguf",
+        "repo_id": "TheBloke/deepseek-coder-6.7B-instruct-GGUF",
+        "filename": "deepseek-coder-6.7b-instruct.Q4_K_M.gguf",
+        "size": "4.0GB",
+        "description": "DeepSeek Coder 6.7B - 高性能なコード生成モデル。英語・中国語対応。",
+        "purpose": "coding",
+        "languages": ["en", "zh"]
+    },
+    "qwen2.5-coder-7b": {
+        "name": "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf",
+        "repo_id": "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+        "filename": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+        "size": "4.7GB",
+        "description": "Qwen2.5 Coder 7B - GPT-4レベルのコーディング能力。多言語対応。",
+        "purpose": "coding",
+        "languages": ["en", "zh", "ja", "multi"]
+    },
+    "codellama-13b": {
+        "name": "CodeLlama-13B-Instruct-Q4_K_M.gguf",
+        "repo_id": "TheBloke/CodeLlama-13B-Instruct-GGUF",
+        "filename": "codellama-13b-instruct.Q4_K_M.gguf",
+        "size": "7.9GB",
+        "description": "CodeLlama 13B - より大規模で高性能なコード生成モデル。",
+        "purpose": "coding",
+        "languages": ["en"]
+    },
+    
+    # 12GBクラスのモデル
+    "deepseek-coder-33b-q3": {
+        "name": "DeepSeek-Coder-33B-Instruct-Q3_K_M.gguf",
+        "repo_id": "TheBloke/deepseek-coder-33B-instruct-GGUF",
+        "filename": "deepseek-coder-33b-instruct.Q3_K_M.gguf",
+        "size": "13.7GB",
+        "description": "DeepSeek Coder 33B - エンタープライズレベルのコード生成。",
+        "purpose": "coding",
+        "languages": ["en", "zh"]
+    },
+    "qwen2.5-coder-14b": {
+        "name": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
+        "repo_id": "Qwen/Qwen2.5-Coder-14B-Instruct-GGUF",
+        "filename": "qwen2.5-coder-14b-instruct-q4_k_m.gguf",
+        "size": "8.8GB",
+        "description": "Qwen2.5 Coder 14B - 最高水準のコーディング能力。128Kトークン対応。",
+        "purpose": "coding",
+        "languages": ["en", "zh", "ja", "multi"]
     }
 }
 
@@ -75,6 +147,7 @@ class ModelManager:
                 "description": model_info["description"],
                 "size": model_info["size"],
                 "purpose": model_info["purpose"],
+                "languages": model_info.get("languages", ["en"]),
                 "path": str(model_path),
                 "installed": model_path.exists(),
                 "downloading": key in self._downloading
