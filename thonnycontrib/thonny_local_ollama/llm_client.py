@@ -46,6 +46,8 @@ class LLMClient:
         self._loading = False
         self._load_lock = threading.Lock()
         self._load_error: Optional[Exception] = None
+        self._load_thread = None
+        self._shutdown = False
         
         # ストリーミング用のキュー
         self._response_queue: queue.Queue = queue.Queue()
@@ -54,57 +56,32 @@ class LLMClient:
         # 外部プロバイダー
         self._external_provider = None
         
-        # デフォルトシステムプロンプト（コーディング最適化版）
-        self.coding_system_prompt = """You are an expert Python programming assistant integrated into Thonny IDE, designed to help users write clean, efficient, and well-structured code.
+        # デフォルトシステムプロンプト（統合版）
+        self.default_system_prompt = """You are an expert Python programming assistant integrated into Thonny IDE, designed to help users learn and write better code.
 
 Your responsibilities:
 1. Generate correct, idiomatic Python code that follows PEP 8 style guidelines
-2. Write code that is readable, maintainable, and well-commented when necessary
-3. Consider edge cases and error handling in your implementations
-4. Use appropriate data structures and algorithms for the task
-5. Prefer simple, clear solutions over complex ones unless complexity is justified
-
-When generating code:
-- Include type hints for function parameters and return values when it improves clarity
-- Use descriptive variable and function names
-- Add docstrings for functions and classes
-- Handle common edge cases (empty inputs, None values, etc.)
-- Avoid global variables and side effects when possible
-
-When explaining code:
-- Be concise but thorough
-- Explain the "why" behind design decisions
-- Point out potential improvements or alternatives
-- Adapt explanations to the user's skill level
-
-Remember: You're helping users learn and write better Python code. Focus on teaching good practices while solving their immediate needs."""
-
-        # 解説用システムプロンプト
-        self.explanation_system_prompt = """You are a patient and knowledgeable Python teacher integrated into Thonny IDE, specializing in explaining code and programming concepts clearly.
-
-Your teaching approach:
-1. Break down complex concepts into simple, understandable parts
-2. Use analogies and real-world examples when helpful
-3. Explain not just "what" the code does, but "why" it works that way
-4. Anticipate common misconceptions and address them proactively
+2. Explain code and programming concepts clearly and patiently
+3. Adapt your responses to the user's skill level (beginner, intermediate, or advanced)
+4. Consider edge cases and error handling in implementations
 5. Encourage good programming practices and habits
 
-When explaining code:
-- Start with a high-level overview, then go into details
-- Explain each important line or block of code
-- Point out any Python-specific features or idioms
-- Highlight potential pitfalls or common mistakes
-- Suggest improvements or alternative approaches when relevant
+When generating code:
+- Write readable, maintainable code with clear variable names
+- Include appropriate comments and docstrings
+- Handle common edge cases (empty inputs, None values, etc.)
+- Prefer simple, clear solutions over complex ones unless complexity is justified
 
-Adapt your explanations based on the user's skill level:
-- Beginner: Use simple language, avoid jargon, explain basic concepts
-- Intermediate: Assume basic knowledge, introduce more advanced concepts gradually
-- Advanced: Focus on optimization, design patterns, and best practices
+When explaining concepts:
+- Break down complex ideas into simple, understandable parts
+- Use analogies and real-world examples when helpful
+- Explain not just "what" but also "why" something works
+- Point out potential improvements or alternatives
 
-Your goal is to help users not just understand the code, but become better programmers."""
+Remember: You're helping users both solve immediate problems and become better programmers. Balance practical solutions with educational value."""
 
-        # デフォルトは用途に応じて選択
-        self.system_prompt = self.coding_system_prompt
+        # デフォルトプロンプトを使用
+        self.system_prompt = self.default_system_prompt
     
     @property
     def is_loaded(self) -> bool:
@@ -149,17 +126,88 @@ Your goal is to help users not just understand the code, but become better progr
             )
             
             # プロンプトタイプを適用
-            prompt_type = workbench.get_option("llm.prompt_type", "coding")
-            if prompt_type == "coding":
-                self.use_coding_prompt()
-            elif prompt_type == "explanation":
-                self.use_explanation_prompt()
-            elif prompt_type == "custom":
+            prompt_type = workbench.get_option("llm.prompt_type", "default")
+            
+            if prompt_type == "custom":
                 custom_prompt = workbench.get_option("llm.custom_prompt", "")
                 if custom_prompt:
                     self.set_system_prompt(custom_prompt)
+            else:
+                # デフォルトプロンプトを使用
+                self.use_default_prompt()
         
         return self._config
+    
+    def _get_language_instruction(self) -> str:
+        """言語設定に基づく指示を取得"""
+        from thonny import get_workbench
+        workbench = get_workbench()
+        
+        output_language = workbench.get_option("llm.output_language", "auto")
+        
+        if output_language == "auto":
+            # Thonnyの言語設定に従う
+            thonny_language = workbench.get_option("general.language", None)
+            if thonny_language and thonny_language.startswith("ja"):
+                return "\nPlease respond in Japanese (日本語で回答してください)."
+            elif thonny_language and thonny_language.startswith("zh"):
+                if "TW" in thonny_language or "HK" in thonny_language:
+                    return "\nPlease respond in Traditional Chinese (請用繁體中文回答)."
+                else:
+                    return "\nPlease respond in Simplified Chinese (请用简体中文回答)."
+            else:
+                return ""  # 英語はデフォルトなので指示不要
+        elif output_language == "ja":
+            return "\nPlease respond in Japanese (日本語で回答してください)."
+        elif output_language == "en":
+            return ""  # 英語はデフォルトなので指示不要
+        elif output_language == "zh-CN":
+            return "\nPlease respond in Simplified Chinese (请用简体中文回答)."
+        elif output_language == "zh-TW":
+            return "\nPlease respond in Traditional Chinese (請用繁體中文回答)."
+        elif output_language == "other":
+            custom_code = workbench.get_option("llm.custom_language_code", "")
+            if custom_code:
+                return f"\nPlease respond in {custom_code}."
+        
+        return ""
+    
+    def _build_system_prompt(self) -> str:
+        """言語設定とスキルレベルを含むシステムプロンプトを構築"""
+        from thonny import get_workbench
+        workbench = get_workbench()
+        
+        # 基本のシステムプロンプトを取得
+        base_prompt = self.system_prompt
+        
+        # プロンプトタイプを確認
+        prompt_type = workbench.get_option("llm.prompt_type", "default")
+        if prompt_type == "custom":
+            # カスタムプロンプトの場合は、言語指示のみ追加
+            language_instruction = self._get_language_instruction()
+            if language_instruction:
+                return base_prompt + language_instruction
+            return base_prompt
+        
+        # デフォルトプロンプトの場合は、スキルレベルと言語を統合
+        skill_level = workbench.get_option("llm.skill_level", "beginner")
+        
+        # スキルレベルの説明を追加
+        skill_instructions = {
+            "beginner": "\n\nIMPORTANT: The user is a beginner programmer. Use simple language, avoid complex jargon, explain basic concepts thoroughly, and provide plenty of examples.",
+            "intermediate": "\n\nIMPORTANT: The user has intermediate programming knowledge. You can use technical terms but should still explain complex concepts. Focus on best practices and common patterns.",
+            "advanced": "\n\nIMPORTANT: The user is an experienced programmer. You can use advanced concepts, focus on optimization, design patterns, and sophisticated solutions. Be concise and technical."
+        }
+        
+        # スキルレベルの指示を追加
+        enhanced_prompt = base_prompt + skill_instructions.get(skill_level, "")
+        
+        # 言語指示を追加
+        language_instruction = self._get_language_instruction()
+        if language_instruction:
+            enhanced_prompt += language_instruction
+        
+        return enhanced_prompt
     
     def _setup_external_provider(self, provider: str):
         """外部プロバイダーをセットアップ"""
@@ -257,12 +305,14 @@ Your goal is to help users not just understand the code, but become better progr
             callback: 読み込み完了時に呼ばれるコールバック(success: bool, error: Optional[Exception])
         """
         def _load():
+            if self._shutdown:
+                return
             success = self.load_model()
-            if callback:
+            if callback and not self._shutdown:
                 callback(success, self._load_error)
         
-        thread = threading.Thread(target=_load, daemon=True)
-        thread.start()
+        self._load_thread = threading.Thread(target=_load, daemon=True)
+        self._load_thread.start()
     
     def unload_model(self):
         """モデルをアンロード"""
@@ -284,8 +334,11 @@ Your goal is to help users not just understand the code, but become better progr
         """
         # 外部プロバイダーを使用する場合
         if self._external_provider:
+            # システムプロンプトを構築
+            system_content = self._build_system_prompt()
+            
             messages = [
-                {"role": "system", "content": self.system_prompt},
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": prompt}
             ]
             return self._external_provider.generate(
@@ -333,8 +386,11 @@ Your goal is to help users not just understand the code, but become better progr
         """
         # 外部プロバイダーを使用する場合
         if self._external_provider:
+            # システムプロンプトを構築
+            system_content = self._build_system_prompt()
+            
             messages = [
-                {"role": "system", "content": self.system_prompt},
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": prompt}
             ]
             for token in self._external_provider.generate_stream(
@@ -378,13 +434,9 @@ Your goal is to help users not just understand the code, but become better progr
         """カスタムシステムプロンプトを設定"""
         self.system_prompt = prompt
     
-    def use_coding_prompt(self):
-        """コーディング用システムプロンプトを使用"""
-        self.system_prompt = self.coding_system_prompt
-    
-    def use_explanation_prompt(self):
-        """解説用システムプロンプトを使用"""
-        self.system_prompt = self.explanation_system_prompt
+    def use_default_prompt(self):
+        """デフォルトシステムプロンプトを使用"""
+        self.system_prompt = self.default_system_prompt
     
     def get_current_system_prompt(self) -> str:
         """現在のシステムプロンプトを取得"""
@@ -401,18 +453,13 @@ Your goal is to help users not just understand the code, but become better progr
         Returns:
             コードの説明
         """
-        # 一時的に解説用プロンプトを使用
-        original_prompt = self.system_prompt
-        self.system_prompt = self.explanation_system_prompt
+        skill_descriptions = {
+            "beginner": "a complete beginner who is just learning programming",
+            "intermediate": "someone with basic programming knowledge",
+            "advanced": "an experienced programmer"
+        }
         
-        try:
-            skill_descriptions = {
-                "beginner": "a complete beginner who is just learning programming",
-                "intermediate": "someone with basic programming knowledge",
-                "advanced": "an experienced programmer"
-            }
-            
-            prompt = f"""Please explain the following Python code for {skill_descriptions.get(skill_level, skill_descriptions['beginner'])}:
+        prompt = f"""Please explain the following Python code for {skill_descriptions.get(skill_level, skill_descriptions['beginner'])}:
 
 ```python
 {code}
@@ -424,11 +471,8 @@ Provide a clear, educational explanation that helps them understand:
 3. Any important concepts or patterns used
 
 Keep the explanation concise but thorough."""
-            
-            return self.generate(prompt, temperature=0.3)  # 低めの温度で一貫性のある説明を生成
-        finally:
-            # 元のプロンプトに戻す
-            self.system_prompt = original_prompt
+        
+        return self.generate(prompt, temperature=0.3)  # 低めの温度で一貫性のある説明を生成
     
     def fix_error(self, code: str, error_message: str) -> str:
         """
@@ -484,9 +528,12 @@ Based on this context, {prompt}"""
     
     def _format_prompt(self, user_prompt: str) -> str:
         """プロンプトをモデル用にフォーマット"""
+        # システムプロンプトを構築
+        system_content = self._build_system_prompt()
+        
         # 簡単なChat MLフォーマット（モデルによって調整が必要）
         return f"""<|system|>
-{self.system_prompt}
+{system_content}
 <|user|>
 {user_prompt}
 <|assistant|>
@@ -529,3 +576,22 @@ Based on this context, {prompt}"""
             result["error"] = str(e)
         
         return result
+    
+    def shutdown(self):
+        """クライアントをシャットダウンして、すべてのスレッドを適切に終了"""
+        self._shutdown = True
+        self._stop_generation = True
+        
+        # ローディングスレッドの終了を待つ
+        if self._load_thread and self._load_thread.is_alive():
+            self._load_thread.join(timeout=5.0)
+        
+        # モデルをアンロード
+        self.unload_model()
+        
+        # キューをクリア
+        while not self._response_queue.empty():
+            try:
+                self._response_queue.get_nowait()
+            except queue.Empty:
+                break

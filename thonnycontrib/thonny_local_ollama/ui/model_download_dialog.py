@@ -132,7 +132,7 @@ class ModelDownloadDialog(tk.Toplevel):
             {'en': 'English', 'zh': 'Chinese', 'ja': 'Japanese', 'multi': 'Multilingual'}.get(lang, lang) 
             for lang in languages
         ])
-        info_text = f"Size: {model['size']} | Purpose: {model['purpose']} | Languages: {lang_text}"
+        info_text = f"Size: {model['size']} | Languages: {lang_text}"
         ttk.Label(model_frame, text=info_text, foreground="gray").grid(
             row=1, column=0, sticky="w"
         )
@@ -268,7 +268,10 @@ class ModelDownloadDialog(tk.Toplevel):
             # エラー時も追跡を削除
             if model_key in self._download_progress:
                 del self._download_progress[model_key]
-            messagebox.showerror("Error", f"Failed to download: {progress.error_message}", parent=self)
+            # エラーメッセージを短縮（最初の行のみ表示）
+            error_lines = progress.error_message.split('\n')
+            short_error = error_lines[0] if error_lines else "Unknown error"
+            messagebox.showerror("Download Error", f"Failed to download {progress.model_name}:\n\n{short_error}", parent=self)
             self._refresh_model_list()
         else:
             # 進捗更新（現在は未実装）
@@ -281,12 +284,6 @@ class ModelDownloadDialog(tk.Toplevel):
         
         # 設定を更新
         workbench.set_option("llm.model_path", model["path"])
-        
-        # 用途に応じた設定
-        if model["purpose"] == "explanation":
-            workbench.set_option("llm.temperature", 0.3)  # より一貫性のある説明
-        elif model["purpose"] == "coding":
-            workbench.set_option("llm.temperature", 0.7)  # より創造的なコード生成
         
         messagebox.showinfo(
             "Model Selected",

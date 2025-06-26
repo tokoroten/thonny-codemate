@@ -1,0 +1,442 @@
+"""
+Markdown renderer for chat messages
+Converts markdown to HTML and provides interactive features
+"""
+import re
+from typing import Optional
+import markdown
+from pygments import highlight
+from pygments.lexers import get_lexer_by_name, PythonLexer
+from pygments.formatters import HtmlFormatter
+
+
+class MarkdownRenderer:
+    """Markdownテキストを対話機能付きのHTMLに変換"""
+    
+    def __init__(self):
+        # Markdownパーサーの設定
+        # fenced_codeとcodehiliteを除外して、独自のコードブロック処理を使用
+        self.md = markdown.Markdown(
+            extensions=[
+                'markdown.extensions.tables',
+                'markdown.extensions.nl2br',
+                'markdown.extensions.sane_lists',
+            ]
+        )
+        
+        # Pygmentsのスタイルを設定
+        self.formatter = HtmlFormatter(style='friendly', nowrap=False)
+        self.css_style = self.formatter.get_style_defs('.highlight')
+        
+        # コードブロックのIDカウンター
+        self.code_block_id = 0
+    
+    def render(self, text: str, sender: str = "assistant") -> str:
+        """
+        MarkdownテキストをHTMLに変換
+        
+        Args:
+            text: Markdownテキスト
+            sender: 送信者（"user", "assistant", "system"）
+            
+        Returns:
+            HTML文字列
+        """
+        # コードブロックを一時的に置換（後で処理）
+        code_blocks = []
+        # より柔軟な正規表現パターン（改行の有無に対応）
+        code_pattern = re.compile(r'```(\w*)\n?(.*?)```', re.DOTALL)
+        
+        def replace_code_block(match):
+            lang = match.group(1) or 'python'
+            code = match.group(2).strip()
+            code_blocks.append((lang, code))
+            # 一意のプレースホルダーを生成
+            placeholder_id = f'CODEBLOCK{len(code_blocks)-1}CODEBLOCK'
+            return f'\n\n{placeholder_id}\n\n'
+        
+        # コードブロックを一時的なプレースホルダーに置換
+        text_with_placeholders = code_pattern.sub(replace_code_block, text)
+        
+        # Markdownを変換
+        html_content = self.md.convert(text_with_placeholders)
+        
+        # コードブロックを処理して戻す
+        for i, (lang, code) in enumerate(code_blocks):
+            code_html = self._render_code_block(lang, code)
+            placeholder = f'CODEBLOCK{i}CODEBLOCK'
+            # <p>タグで囲まれている場合も考慮
+            html_content = html_content.replace(f'<p>{placeholder}</p>', code_html)
+            html_content = html_content.replace(placeholder, code_html)
+        
+        # メッセージ全体をラップ
+        sender_class = f"message-{sender}"
+        full_html = f'''
+        <div class="message {sender_class}">
+            <div class="message-header">{sender.title()}</div>
+            <div class="message-content">
+                {html_content}
+            </div>
+        </div>
+        '''
+        
+        return full_html
+    
+    def _render_code_block(self, language: str, code: str) -> str:
+        """
+        コードブロックをシンタックスハイライト付きでレンダリング
+        Copy/Insertボタンも追加
+        """
+        self.code_block_id += 1
+        block_id = f"code-block-{self.code_block_id}"
+        
+        # シンタックスハイライト
+        try:
+            if language:
+                lexer = get_lexer_by_name(language, stripall=True)
+            else:
+                lexer = PythonLexer(stripall=True)
+            highlighted_code = highlight(code, lexer, self.formatter)
+        except Exception:
+            # フォールバック
+            highlighted_code = f'<pre><code>{self._escape_html(code)}</code></pre>'
+        
+        # エスケープされたコードを保存（JavaScript用）
+        escaped_code = self._escape_js_string(code)
+        
+        # HTMLを生成
+        return f'''
+        <div class="code-block" id="{block_id}">
+            <div class="code-header">
+                <span class="code-language">{language or 'text'}</span>
+                <div class="code-buttons">
+                    <button class="code-button copy-button" onclick="copyCode('{block_id}')">
+                        Copy
+                    </button>
+                    <button class="code-button insert-button" onclick="insertCode('{block_id}')">
+                        Insert
+                    </button>
+                </div>
+            </div>
+            <div class="code-content">
+                {highlighted_code}
+            </div>
+            <textarea class="code-source" style="display: none;" id="{block_id}-source">{self._escape_html(code)}</textarea>
+        </div>
+        '''
+    
+    def _escape_html(self, text: str) -> str:
+        """HTMLエスケープ"""
+        return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    
+    def _escape_js_string(self, text: str) -> str:
+        """JavaScript文字列用のエスケープ"""
+        # シングルクォート、ダブルクォート、改行、バックスラッシュをエスケープ
+        return (text
+            .replace('\\', '\\\\')
+            .replace("'", "\\'")
+            .replace('"', '\\"')
+            .replace('\n', '\\n')
+            .replace('\r', '\\r')
+            .replace('\t', '\\t'))
+    
+    def get_full_html(self, messages: list) -> str:
+        """
+        メッセージリストから完全なHTMLを生成
+        
+        Args:
+            messages: [(sender, text), ...] のリスト
+            
+        Returns:
+            完全なHTML文書
+        """
+        # メッセージをレンダリング
+        messages_html = []
+        for sender, text in messages:
+            messages_html.append(self.render(text, sender))
+        
+        # 完全なHTML文書を生成
+        return f'''
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        /* 基本スタイル */
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background-color: #f8f8f8;
+            font-size: 14px;
+            line-height: 1.6;
+        }}
+        
+        /* メッセージスタイル */
+        .message {{
+            margin-bottom: 20px;
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }}
+        
+        .message-header {{
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #333;
+        }}
+        
+        .message-user .message-header {{
+            color: #0066cc;
+        }}
+        
+        .message-assistant .message-header {{
+            color: #006600;
+        }}
+        
+        .message-system .message-header {{
+            color: #666666;
+        }}
+        
+        .message-content {{
+            color: #333;
+        }}
+        
+        /* コードブロックスタイル */
+        .code-block {{
+            margin: 10px 0;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #f6f8fa;
+        }}
+        
+        .code-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #f1f3f5;
+            border-bottom: 1px solid #e1e4e8;
+        }}
+        
+        .code-language {{
+            font-size: 12px;
+            color: #586069;
+            font-weight: 500;
+        }}
+        
+        .code-buttons {{
+            display: flex;
+            gap: 8px;
+        }}
+        
+        .code-button {{
+            padding: 4px 8px;
+            font-size: 12px;
+            border: 1px solid #d1d5da;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }}
+        
+        .code-button:hover {{
+            background: #f3f4f6;
+            border-color: #c2c7cd;
+        }}
+        
+        .code-button:active {{
+            background: #e1e4e8;
+        }}
+        
+        .code-button.copy-button {{
+            background-color: #0066cc;
+            color: white;
+        }}
+        
+        .code-button.copy-button:hover {{
+            background-color: #0052a3;
+        }}
+        
+        .code-button.insert-button {{
+            background-color: #28a745;
+            color: white;
+        }}
+        
+        .code-button.insert-button:hover {{
+            background-color: #218838;
+        }}
+        
+        .code-content {{
+            padding: 12px;
+            overflow-x: auto;
+        }}
+        
+        .code-content pre {{
+            margin: 0;
+            font-family: "Consolas", "Monaco", "Courier New", monospace;
+            font-size: 13px;
+            line-height: 1.4;
+        }}
+        
+        /* Pygmentsスタイル */
+        {self.css_style}
+        
+        /* その他のMarkdown要素 */
+        p {{
+            margin: 0 0 10px 0;
+        }}
+        
+        ul, ol {{
+            margin: 0 0 10px 0;
+            padding-left: 20px;
+        }}
+        
+        blockquote {{
+            margin: 0 0 10px 0;
+            padding: 0 0 0 16px;
+            border-left: 4px solid #dfe2e5;
+            color: #6a737d;
+        }}
+        
+        table {{
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }}
+        
+        th, td {{
+            border: 1px solid #dfe2e5;
+            padding: 6px 13px;
+        }}
+        
+        th {{
+            background-color: #f1f3f5;
+            font-weight: 600;
+        }}
+        
+        /* コピー成功の通知 */
+        .copy-success {{
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            animation: slideIn 0.3s ease-out;
+        }}
+        
+        @keyframes slideIn {{
+            from {{
+                transform: translateY(100%);
+                opacity: 0;
+            }}
+            to {{
+                transform: translateY(0);
+                opacity: 1;
+            }}
+        }}
+    </style>
+    <script>
+        // コードをコピー
+        function copyCode(blockId) {{
+            // textareaから実際のコードを取得
+            var sourceElement = document.getElementById(blockId + '-source');
+            if (!sourceElement) {{
+                alert('Code source not found');
+                return;
+            }}
+            var code = sourceElement.value;
+            
+            // クリップボードにコピー（フォールバック付き）
+            if (navigator.clipboard && navigator.clipboard.writeText) {{
+                navigator.clipboard.writeText(code).then(function() {{
+                    showCopySuccess();
+                }}).catch(function() {{
+                    fallbackCopy(code);
+                }});
+            }} else {{
+                fallbackCopy(code);
+            }}
+        }}
+        
+        // コードを挿入（Thonnyのエディタに）
+        function insertCode(blockId) {{
+            // textareaから実際のコードを取得
+            var sourceElement = document.getElementById(blockId + '-source');
+            if (!sourceElement) {{
+                alert('Code source not found');
+                return;
+            }}
+            var code = sourceElement.value;
+            
+            // tkinterwebからPythonにメッセージを送る
+            // 注：tkinterwebの制限により、この機能は現在動作しない可能性があります
+            try {{
+                // Python側でインターセプトできるカスタムイベントを発火
+                window.location.href = 'thonny:insert:' + encodeURIComponent(code);
+            }} catch (e) {{
+                // フォールバック：コピーして手動で貼り付けるよう促す
+                copyCode(blockId);
+                alert('Code copied! Please paste it in the editor (Ctrl+V)');
+            }}
+        }}
+        
+        // フォールバックコピー（古いブラウザ用）
+        function fallbackCopy(text) {{
+            var textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.top = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {{
+                document.execCommand('copy');
+                showCopySuccess();
+            }} catch (err) {{
+                alert('Failed to copy code');
+            }}
+            
+            document.body.removeChild(textArea);
+        }}
+        
+        // コピー成功通知
+        function showCopySuccess() {{
+            var notification = document.createElement('div');
+            notification.className = 'copy-success';
+            notification.textContent = 'Code copied!';
+            document.body.appendChild(notification);
+            
+            setTimeout(function() {{
+                notification.remove();
+            }}, 2000);
+        }}
+        
+        // 新しいコンテンツが追加された時にスクロール
+        function scrollToBottom() {{
+            window.scrollTo(0, document.body.scrollHeight);
+        }}
+        
+        // ページ読み込み時にスクロール
+        window.onload = function() {{
+            setTimeout(scrollToBottom, 100);
+        }};
+        
+        // DOMコンテンツ読み込み時にもスクロール
+        document.addEventListener('DOMContentLoaded', function() {{
+            setTimeout(scrollToBottom, 50);
+        }});
+    </script>
+</head>
+<body>
+    <div id="messages">
+        {''.join(messages_html)}
+    </div>
+</body>
+</html>
+        '''

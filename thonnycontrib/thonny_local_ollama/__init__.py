@@ -5,6 +5,7 @@ GitHub Copilot風のローカルLLM統合を提供するThonnyプラグイン
 import logging
 import sys
 from typing import Optional
+from .i18n import tr
 
 # ログを完全に無効化（Thonny環境での問題を回避）
 import logging.config
@@ -89,14 +90,39 @@ def load_plugin():
         
         # UIコンポーネントを登録（エラーハンドリングを追加）
         try:
-            from .ui.chat_view import LLMChatView
-            workbench.add_view(
-                LLMChatView,
-                "LLM Assistant",
-                "e",  # 右側に配置（east）
-                visible_by_default=False,
-                default_position_key="e"
-            )
+            # 設定に基づいてHTMLまたはテキストビューを選択
+            use_html_view = workbench.get_option("llm.use_html_view", True)
+            
+            if use_html_view:
+                try:
+                    from .ui.chat_view_html import LLMChatViewHTML
+                    workbench.add_view(
+                        LLMChatViewHTML,
+                        "LLM Assistant",
+                        "e",  # 右側に配置（east）
+                        visible_by_default=False,
+                        default_position_key="e"
+                    )
+                except ImportError:
+                    # フォールバック：HTMLビューが使えない場合はテキストビューを使用
+                    logger.info("HTML view not available, falling back to text view")
+                    from .ui.chat_view import LLMChatView
+                    workbench.add_view(
+                        LLMChatView,
+                        "LLM Assistant",
+                        "e",
+                        visible_by_default=False,
+                        default_position_key="e"
+                    )
+            else:
+                from .ui.chat_view import LLMChatView
+                workbench.add_view(
+                    LLMChatView,
+                    "LLM Assistant",
+                    "e",
+                    visible_by_default=False,
+                    default_position_key="e"
+                )
         except ImportError as e:
             logger.warning(f"Could not import chat view: {e}")
         
@@ -104,8 +130,8 @@ def load_plugin():
         workbench.add_command(
             command_id="show_llm_assistant",
             menu_name="tools",
-            command_label="Show LLM Assistant",
-            handler=lambda: workbench.show_view("LLMChatView"),
+            command_label=tr("Show LLM Assistant"),
+            handler=lambda: workbench.show_view("LLMChatViewHTML" if use_html_view else "LLMChatView"),
             group=150
         )
         
@@ -113,7 +139,7 @@ def load_plugin():
         workbench.add_command(
             command_id="explain_selection",
             menu_name="edit",
-            command_label="Explain with LLM",
+            command_label=tr("Explain Selected Code"),
             handler=explain_selection_handler,
             default_sequence=None,
             extra_sequences=[],
@@ -124,7 +150,7 @@ def load_plugin():
         workbench.add_command(
             command_id="generate_from_comment",
             menu_name="edit",
-            command_label="Generate Code from Comment",
+            command_label=tr("Generate Code from Comment"),
             handler=generate_from_comment_handler,
             default_sequence="<Control-Alt-g>",
             extra_sequences=[],
@@ -135,6 +161,7 @@ def load_plugin():
         workbench.set_default("llm.model_path", "")
         workbench.set_default("llm.skill_level", "beginner")
         workbench.set_default("llm.auto_load", False)
+        workbench.set_default("llm.use_html_view", True)
         
         _plugin_loaded = True
         try:
@@ -183,10 +210,12 @@ def explain_selection_handler():
         selected_text = text_widget.get("sel.first", "sel.last")
         
         # チャットビューを表示
-        workbench.show_view("LLMChatView")
+        use_html_view = workbench.get_option("llm.use_html_view", True)
+        view_name = "LLMChatViewHTML" if use_html_view else "LLMChatView"
+        workbench.show_view(view_name)
         
         # チャットビューに説明リクエストを送信
-        chat_view = workbench.get_view("LLMChatView")
+        chat_view = workbench.get_view(view_name)
         if chat_view and hasattr(chat_view, 'explain_code'):
             chat_view.explain_code(selected_text)
         else:
@@ -213,6 +242,17 @@ def get_llm_client():
         _llm_client = LLMClient()
     
     return _llm_client
+
+
+def cleanup_llm_client():
+    """LLMクライアントをクリーンアップ"""
+    global _llm_client
+    if _llm_client is not None:
+        try:
+            _llm_client.shutdown()
+        except Exception:
+            pass
+        _llm_client = None
 
 
 def generate_from_comment_handler():
@@ -265,10 +305,12 @@ def generate_from_comment_handler():
         comment_text = "\n".join(comment_lines)
         
         # チャットビューを表示
-        workbench.show_view("LLMChatView")
+        use_html_view = workbench.get_option("llm.use_html_view", True)
+        view_name = "LLMChatViewHTML" if use_html_view else "LLMChatView"
+        workbench.show_view(view_name)
         
         # チャットビューに生成リクエストを送信
-        chat_view = workbench.get_view("LLMChatView")
+        chat_view = workbench.get_view(view_name)
         if chat_view and hasattr(chat_view, 'generate_code_from_comment'):
             chat_view.generate_code_from_comment(comment_text, cursor_pos)
         else:
@@ -286,3 +328,22 @@ def generate_from_comment_handler():
             "Error",
             f"Failed to generate code: {str(e)}"
         )
+
+
+def unload_plugin():
+    """プラグインのアンロード時のクリーンアップ"""
+    global _plugin_loaded
+    
+    # LLMクライアントをクリーンアップ
+    cleanup_llm_client()
+    
+    # プラグインの状態をリセット
+    _plugin_loaded = False
+    
+    try:
+        # ワークベンチからビューを削除（必要な場合）
+        from thonny import get_workbench
+        workbench = get_workbench()
+        # ビューの削除は通常Thonnyが自動的に行うため、ここでは特別な処理は不要
+    except Exception:
+        pass

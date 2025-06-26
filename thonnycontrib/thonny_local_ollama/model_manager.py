@@ -3,104 +3,67 @@
 推奨モデルのダウンロードと管理機能を提供
 """
 import os
-import logging
+
+# huggingface_hubのロギングを環境変数で無効化
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
+
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+# ロギングを無効化（Thonny環境での問題を回避）
+import logging
+logging.disable(logging.CRITICAL)
+
+# huggingface_hubのロギングも無効化
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub.file_download").setLevel(logging.ERROR)
+logging.getLogger("urllib3").setLevel(logging.ERROR)
+logging.getLogger("requests").setLevel(logging.ERROR)
+
+# すべてのロガーにNullHandlerを設定
+for logger_name in ["huggingface_hub", "huggingface_hub.file_download", "urllib3", "requests"]:
+    logger = logging.getLogger(logger_name)
+    logger.handlers = []
+    logger.addHandler(logging.NullHandler())
 
 # 推奨モデルの定義
 RECOMMENDED_MODELS = {
-    # 2GB以下の軽量モデル
-    "explanation": {
+    # Llama 3.2シリーズ（Meta公式の最新モデル）
+    "llama3.2-1b": {
         "name": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
         "repo_id": "bartowski/Llama-3.2-1B-Instruct-GGUF",
         "filename": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
         "size": "0.8GB",
-        "description": "軽量で高速な解説用モデル。初心者向けの分かりやすい説明が得意。",
-        "purpose": "explanation",
-        "languages": ["en"]
+        "description": "Llama 3.2 1B - 最新の軽量モデル。高速で効率的。",
+        "languages": ["en", "multi"]
     },
-    "coding": {
-        "name": "DeepSeek-Coder-1.3B-Instruct-Q4_K_M.gguf", 
-        "repo_id": "bartowski/DeepSeek-Coder-1.3B-Instruct-GGUF",
-        "filename": "DeepSeek-Coder-1.3B-Instruct-Q4_K_M.gguf",
-        "size": "0.9GB",
-        "description": "コード生成に特化したモデル。高品質なPythonコードを生成。",
-        "purpose": "coding",
-        "languages": ["en", "zh"]
+    "llama3.2-3b": {
+        "name": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        "repo_id": "bartowski/Llama-3.2-3B-Instruct-GGUF",
+        "filename": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        "size": "2.0GB",
+        "description": "Llama 3.2 3B - バランスの良いモデル。品質と速度の両立。",
+        "languages": ["en", "multi"]
     },
-    
-    # 4GBクラスのモデル
-    "qwen2.5-coder-3b": {
-        "name": "Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
-        "repo_id": "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF",
-        "filename": "qwen2.5-coder-3b-instruct-q4_k_m.gguf",
-        "size": "2.3GB",
-        "description": "Qwen2.5 Coder 3B - 多言語対応のコーディングモデル。日本語・英語・中国語に対応。",
-        "purpose": "coding",
-        "languages": ["en", "zh", "ja", "multi"]
+    "llama3.1-8b": {
+        "name": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        "repo_id": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+        "filename": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        "size": "4.9GB",
+        "description": "Llama 3.1 8B - 高性能モデル。GPT-3.5相当の能力。",
+        "languages": ["en", "multi"]
     },
-    "codellama-7b": {
-        "name": "CodeLlama-7B-Instruct-Q4_K_M.gguf",
-        "repo_id": "TheBloke/CodeLlama-7B-Instruct-GGUF",
-        "filename": "codellama-7b-instruct.Q4_K_M.gguf",
-        "size": "4.1GB",
-        "description": "Meta社のCodeLlama 7B。高品質なコード生成が可能。",
-        "purpose": "coding",
-        "languages": ["en"]
-    },
-    
-    # 8GBクラスのモデル
-    "deepseek-coder-6.7b": {
-        "name": "DeepSeek-Coder-6.7B-Instruct-Q4_K_M.gguf",
-        "repo_id": "TheBloke/deepseek-coder-6.7B-instruct-GGUF",
-        "filename": "deepseek-coder-6.7b-instruct.Q4_K_M.gguf",
-        "size": "4.0GB",
-        "description": "DeepSeek Coder 6.7B - 高性能なコード生成モデル。英語・中国語対応。",
-        "purpose": "coding",
-        "languages": ["en", "zh"]
-    },
-    "qwen2.5-coder-7b": {
-        "name": "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf",
-        "repo_id": "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
-        "filename": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
-        "size": "4.7GB",
-        "description": "Qwen2.5 Coder 7B - GPT-4レベルのコーディング能力。多言語対応。",
-        "purpose": "coding",
-        "languages": ["en", "zh", "ja", "multi"]
-    },
-    "codellama-13b": {
-        "name": "CodeLlama-13B-Instruct-Q4_K_M.gguf",
-        "repo_id": "TheBloke/CodeLlama-13B-Instruct-GGUF",
-        "filename": "codellama-13b-instruct.Q4_K_M.gguf",
+    "llama3-13b": {
+        "name": "Meta-Llama-3-13B-Instruct-Q4_K_M.gguf",
+        "repo_id": "QuantFactory/Meta-Llama-3-13B-Instruct-GGUF",
+        "filename": "Meta-Llama-3-13B-Instruct.Q4_K_M.gguf",
         "size": "7.9GB",
-        "description": "CodeLlama 13B - より大規模で高性能なコード生成モデル。",
-        "purpose": "coding",
-        "languages": ["en"]
+        "description": "Llama 3 13B - 大規模モデル。高度な推論能力。",
+        "languages": ["en", "multi"]
     },
-    
-    # 12GBクラスのモデル
-    "deepseek-coder-33b-q3": {
-        "name": "DeepSeek-Coder-33B-Instruct-Q3_K_M.gguf",
-        "repo_id": "TheBloke/deepseek-coder-33B-instruct-GGUF",
-        "filename": "deepseek-coder-33b-instruct.Q3_K_M.gguf",
-        "size": "13.7GB",
-        "description": "DeepSeek Coder 33B - エンタープライズレベルのコード生成。",
-        "purpose": "coding",
-        "languages": ["en", "zh"]
-    },
-    "qwen2.5-coder-14b": {
-        "name": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
-        "repo_id": "Qwen/Qwen2.5-Coder-14B-Instruct-GGUF",
-        "filename": "qwen2.5-coder-14b-instruct-q4_k_m.gguf",
-        "size": "8.8GB",
-        "description": "Qwen2.5 Coder 14B - 最高水準のコーディング能力。128Kトークン対応。",
-        "purpose": "coding",
-        "languages": ["en", "zh", "ja", "multi"]
-    }
 }
 
 @dataclass
@@ -146,7 +109,6 @@ class ModelManager:
                 "name": model_info["name"],
                 "description": model_info["description"],
                 "size": model_info["size"],
-                "purpose": model_info["purpose"],
                 "languages": model_info.get("languages", ["en"]),
                 "path": str(model_path),
                 "installed": model_path.exists(),
@@ -163,7 +125,6 @@ class ModelManager:
                     "name": gguf_file.name,
                     "description": "Custom model",
                     "size": f"{gguf_file.stat().st_size / 1024 / 1024 / 1024:.1f}GB",
-                    "purpose": "general",
                     "path": str(gguf_file),
                     "installed": True,
                     "downloading": False
@@ -171,18 +132,18 @@ class ModelManager:
         
         return models
     
-    def get_model_path(self, purpose: str = "explanation") -> Optional[str]:
+    def get_model_path(self, model_key: str = "llama3.2-1b") -> Optional[str]:
         """
-        指定された用途に適したモデルのパスを取得
+        指定されたモデルのパスを取得
         
         Args:
-            purpose: "explanation" または "coding"
+            model_key: モデルのキー（"llama3.2-1b"など）
             
         Returns:
             モデルファイルのパス（存在する場合）
         """
-        if purpose in RECOMMENDED_MODELS:
-            model_info = RECOMMENDED_MODELS[purpose]
+        if model_key in RECOMMENDED_MODELS:
+            model_info = RECOMMENDED_MODELS[model_key]
             model_path = self.models_dir / model_info["filename"]
             if model_path.exists():
                 return str(model_path)
@@ -205,7 +166,7 @@ class ModelManager:
             raise ValueError(f"Unknown model key: {model_key}")
         
         if model_key in self._downloading:
-            logger.warning(f"Model {model_key} is already being downloaded")
+            # すでにダウンロード中
             return
         
         model_info = RECOMMENDED_MODELS[model_key]
@@ -225,10 +186,16 @@ class ModelManager:
         try:
             # huggingface_hubをインポート
             try:
+                # インポート前に追加のロギング無効化
+                import sys
+                if hasattr(sys.stderr, 'write') and sys.stderr is None:
+                    # sys.stderrがNoneの場合、ダミーのファイルオブジェクトを設定
+                    import io
+                    sys.stderr = io.StringIO()
+                
                 from huggingface_hub import hf_hub_download
             except ImportError:
-                error_msg = "huggingface_hub is not installed. Please run: uv pip install huggingface-hub"
-                logger.error(error_msg)
+                error_msg = "huggingface_hub is not installed. Please run: pip install huggingface-hub"
                 if progress_callback:
                     progress = DownloadProgress(
                         model_name=model_info["name"],
@@ -240,27 +207,45 @@ class ModelManager:
                     progress_callback(progress)
                 return
             
-            # 進捗報告用のコールバック
-            def hf_progress_callback(progress_dict):
-                if progress_callback and "downloaded" in progress_dict:
-                    progress = DownloadProgress(
-                        model_name=model_info["name"],
-                        downloaded=progress_dict.get("downloaded", 0),
-                        total=progress_dict.get("total", 0),
-                        status="downloading"
-                    )
-                    progress_callback(progress)
-            
-            logger.info(f"Downloading model: {model_info['name']}")
+            # ダウンロード開始通知
+            if progress_callback:
+                progress = DownloadProgress(
+                    model_name=model_info["name"],
+                    downloaded=0,
+                    total=0,
+                    status="downloading"
+                )
+                progress_callback(progress)
             
             # ダウンロード実行
-            downloaded_path = hf_hub_download(
-                repo_id=model_info["repo_id"],
-                filename=model_info["filename"],
-                local_dir=str(self.models_dir)
-            )
+            try:
+                # ロギング出力を一時的にキャプチャ
+                import io
+                import sys
+                old_stderr = sys.stderr
+                sys.stderr = io.StringIO()
+                
+                try:
+                    # 単一ファイルのダウンロード
+                    downloaded_path = hf_hub_download(
+                        repo_id=model_info["repo_id"],
+                        filename=model_info["filename"],
+                        local_dir=str(self.models_dir),
+                        force_download=False,  # 既存ファイルがあればスキップ
+                        resume_download=True,  # 中断されたダウンロードを再開
+                        local_dir_use_symlinks=False  # シンボリックリンクを使わない
+                    )
+                finally:
+                    # stderrを復元
+                    sys.stderr = old_stderr
+                    
+            except AttributeError as e:
+                if "'NoneType' object has no attribute 'write'" in str(e):
+                    raise Exception("Logging error in huggingface_hub. This is a known issue in Thonny environment. Please try downloading the model manually.")
+                else:
+                    raise
             
-            logger.info(f"Model downloaded successfully: {downloaded_path}")
+            # ダウンロード完了
             
             # 完了通知
             if progress_callback:
@@ -273,14 +258,16 @@ class ModelManager:
                 progress_callback(progress)
                 
         except Exception as e:
-            logger.error(f"Failed to download model {model_key}: {e}")
+            # エラー発生
+            import traceback
+            error_detail = f"{str(e)}\n\nDetails:\n{traceback.format_exc()}"
             if progress_callback:
                 progress = DownloadProgress(
                     model_name=model_info["name"],
                     downloaded=0,
                     total=0,
                     status="error",
-                    error_message=str(e)
+                    error_message=error_detail
                 )
                 progress_callback(progress)
         finally:
@@ -289,7 +276,7 @@ class ModelManager:
     def cancel_download(self, model_key: str):
         """ダウンロードをキャンセル（現在は未実装）"""
         # TODO: ダウンロードのキャンセル機能を実装
-        logger.warning("Download cancellation is not implemented yet")
+        pass
     
     def delete_model(self, model_path: str) -> bool:
         """
@@ -305,11 +292,11 @@ class ModelManager:
             path = Path(model_path)
             if path.exists() and path.parent == self.models_dir:
                 path.unlink()
-                logger.info(f"Model deleted: {model_path}")
+                # モデルを削除
                 return True
             else:
-                logger.warning(f"Model file not found or invalid path: {model_path}")
+                # ファイルが見つからないか無効なパス
                 return False
         except Exception as e:
-            logger.error(f"Failed to delete model: {e}")
+            # 削除に失敗
             return False

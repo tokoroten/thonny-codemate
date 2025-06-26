@@ -11,22 +11,57 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 - [x] Implement basic load_plugin() function (2025-06-24完了)
 - [x] Create chat panel UI on the right side (like GitHub Copilot) (2025-06-24完了)
 - [x] Implement context menu for 'Code Explanation' (2025-06-24完了)
+- [x] Add model download manager with recommended models (2025-06-25完了)
+- [x] Fix streaming output duplicate labels (2025-06-25完了)
+- [x] Add stop generation functionality (button and ESC key) (2025-06-25完了)
+- [x] Fix context inclusion to use current editor file (2025-06-25完了)
+- [x] Fix logging errors in Thonny environment (2025-06-25完了)
+- [x] Implement Markdown rendering for LLM output using tkinterweb (2025-06-26完了)
 
 ## Medium Priority Tasks
 
 - [x] Add configuration management (settings_dialog.py) (2025-06-24完了)
 - [x] Implement lazy model loading (load on first use, not at startup) (2025-06-24完了)
-- [ ] Add error fixing assistance feature
-- [ ] Create tests directory and basic unit tests
+- [x] Add error fixing assistance feature (2025-06-25完了)
+- [x] Create tests directory and basic unit tests (2025-06-24完了)
+- [x] Implement code generation from comments (2025-06-25完了)
+- [x] Add customizable system prompts (2025-06-25完了)
+- [x] Improve button sizes for better text display (2025-06-25完了)
+- [x] Implement key binding changes and UI adjustments (2025-06-25完了)
+- [x] Add Copy and Insert buttons for code blocks (2025-06-26完了)
 
 ## Low Priority Tasks
 
 - [x] Add user skill level selection feature (2025-06-24完了)
-- [ ] Implement multi-file context understanding
-- [ ] Add support for external APIs (ChatGPT/Ollama/OpenRouter)
+- [x] Implement multi-file context understanding (2025-06-25完了)
+- [x] Add support for external APIs (ChatGPT/Ollama/OpenRouter) (2025-06-25完了)
 - [ ] Implement inline code completion (cursor position)
 - [ ] Create USB portable deployment configuration
 - [ ] Prepare PyPI package and publish
+
+## Recent Updates (2025-06-26)
+
+### Markdown Rendering Implementation
+- Created `markdown_renderer.py` for converting markdown to HTML with syntax highlighting
+- Implemented `chat_view_html.py` using tkinterweb for rich text display
+- Added interactive Copy/Insert buttons for code blocks
+- Made HTML view optional with fallback to text-only view
+- Added setting in preferences to toggle between HTML and text views
+
+### Features Added
+- **Markdown Rendering**: Full markdown support with syntax highlighting using Pygments
+- **Code Block Buttons**: 
+  - Copy button: Copies code to clipboard with fallback support
+  - Insert button: Inserts code at cursor position in editor
+- **Graceful Fallback**: If tkinterweb is not installed, falls back to text view
+- **User Choice**: Setting to choose between HTML (Markdown) and text views
+
+### Technical Details
+- Uses `tkinterweb` for HTML rendering in Tkinter
+- Uses `markdown` library for Markdown to HTML conversion
+- Uses `pygments` for syntax highlighting with friendly theme
+- JavaScript interface for communication between HTML and Python
+- Responsive design with proper styling for chat interface
 
 ## Notes
 

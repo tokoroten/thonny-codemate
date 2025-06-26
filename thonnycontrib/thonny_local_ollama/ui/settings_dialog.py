@@ -16,22 +16,65 @@ class SettingsDialog(tk.Toplevel):
         super().__init__(parent)
         
         self.title("LLM Assistant Settings")
-        self.geometry("500x400")
         
         self.workbench = get_workbench()
         self.settings_changed = False
         
         self._init_ui()
         self._load_settings()
+        
+        # コンテンツのサイズに基づいてウィンドウサイズを調整
+        self.update_idletasks()
+        self._adjust_window_size()
     
     def _init_ui(self):
         """UIを初期化"""
-        # メインフレーム
-        main_frame = ttk.Frame(self, padding="10")
-        main_frame.grid(row=0, column=0, sticky="nsew")
+        # スクロール可能なキャンバスを作成
+        canvas = tk.Canvas(self, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        self.scrollable_frame = ttk.Frame(canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # マウスホイールのバインディング
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        # Canvasにフォーカスがある時のみスクロール
+        def _on_enter(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            # Linux/macOS
+            canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
+            canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
+        
+        def _on_leave(event):
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+        
+        canvas.bind("<Enter>", _on_enter)
+        canvas.bind("<Leave>", _on_leave)
+        
+        # ウィンドウを閉じる時にバインディングを解除
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        
+        # レイアウト
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
         
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
+        
+        # メインフレーム（スクロール可能フレーム内）
+        main_frame = ttk.Frame(self.scrollable_frame, padding="10")
+        main_frame.grid(row=0, column=0, sticky="nsew")
+        self.scrollable_frame.columnconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
         
         # モデル設定
@@ -120,13 +163,61 @@ class SettingsDialog(tk.Toplevel):
         )
         skill_combo.grid(row=7, column=1, sticky="w", pady=5)
         
+        # Markdownレンダリング
+        ttk.Label(main_frame, text="Use Markdown View:").grid(row=8, column=0, sticky="w", pady=5)
+        self.use_html_view_var = tk.BooleanVar(value=True)
+        html_check = ttk.Checkbutton(
+            main_frame,
+            text="Enable Markdown rendering (requires tkinterweb)",
+            variable=self.use_html_view_var
+        )
+        html_check.grid(row=8, column=1, sticky="w", pady=5)
+        
+        # 出力言語
+        ttk.Label(main_frame, text="Output Language:").grid(row=9, column=0, sticky="w", pady=5)
+        self.output_language_var = tk.StringVar(value="auto")
+        
+        # 言語オプション
+        language_options = [
+            ("auto", "Auto (Follow Thonny)"),
+            ("ja", "日本語"),
+            ("en", "English"),
+            ("zh-CN", "中文（简体）"),
+            ("zh-TW", "中文（繁體）"),
+            ("other", "Other...")
+        ]
+        
+        language_frame = ttk.Frame(main_frame)
+        language_frame.grid(row=9, column=1, columnspan=2, sticky="w", pady=5)
+        
+        self.language_combo = ttk.Combobox(
+            language_frame,
+            textvariable=self.output_language_var,
+            values=[code for code, _ in language_options],
+            state="readonly",
+            width=15
+        )
+        self.language_combo.grid(row=0, column=0, sticky="w")
+        self.language_combo.bind("<<ComboboxSelected>>", self._on_language_changed)
+        
+        # 言語表示ラベル
+        self.language_label = ttk.Label(language_frame, text="", foreground="gray")
+        self.language_label.grid(row=0, column=1, padx=(10, 0))
+        
+        # カスタム言語入力（Other...選択時のみ表示）
+        self.custom_language_frame = ttk.Frame(main_frame)
+        self.custom_language_entry = ttk.Entry(self.custom_language_frame, width=30)
+        ttk.Label(self.custom_language_frame, text="Language code:").pack(side=tk.LEFT, padx=(0, 5))
+        self.custom_language_entry.pack(side=tk.LEFT)
+        # 初期状態では非表示
+        
         # 外部プロバイダー設定
         ttk.Label(main_frame, text="Provider Settings", font=("", 10, "bold")).grid(
-            row=8, column=0, columnspan=3, sticky="w", pady=(20, 10)
+            row=11, column=0, columnspan=3, sticky="w", pady=(20, 10)
         )
         
         # プロバイダー選択
-        ttk.Label(main_frame, text="Provider:").grid(row=9, column=0, sticky="w", pady=5)
+        ttk.Label(main_frame, text="Provider:").grid(row=12, column=0, sticky="w", pady=5)
         self.provider_var = tk.StringVar(value="local")
         provider_combo = ttk.Combobox(
             main_frame,
@@ -135,54 +226,46 @@ class SettingsDialog(tk.Toplevel):
             state="readonly",
             width=15
         )
-        provider_combo.grid(row=9, column=1, sticky="w", pady=5)
+        provider_combo.grid(row=12, column=1, sticky="w", pady=5)
         provider_combo.bind("<<ComboboxSelected>>", self._on_provider_changed)
         
         # APIキー（外部プロバイダー用）
         self.api_key_label = ttk.Label(main_frame, text="API Key:")
-        self.api_key_label.grid(row=10, column=0, sticky="w", pady=5)
+        self.api_key_label.grid(row=13, column=0, sticky="w", pady=5)
         self.api_key_var = tk.StringVar()
         self.api_key_entry = ttk.Entry(main_frame, textvariable=self.api_key_var, show="*")
-        self.api_key_entry.grid(row=10, column=1, sticky="ew", pady=5)
+        self.api_key_entry.grid(row=13, column=1, sticky="ew", pady=5)
         
         # ベースURL（Ollama用）
         self.base_url_label = ttk.Label(main_frame, text="Base URL:")
-        self.base_url_label.grid(row=11, column=0, sticky="w", pady=5)
+        self.base_url_label.grid(row=14, column=0, sticky="w", pady=5)
         self.base_url_var = tk.StringVar(value="http://localhost:11434")
         self.base_url_entry = ttk.Entry(main_frame, textvariable=self.base_url_var)
-        self.base_url_entry.grid(row=11, column=1, sticky="ew", pady=5)
+        self.base_url_entry.grid(row=14, column=1, sticky="ew", pady=5)
         
         # 外部モデル名
         self.external_model_label = ttk.Label(main_frame, text="Model Name:")
-        self.external_model_label.grid(row=12, column=0, sticky="w", pady=5)
+        self.external_model_label.grid(row=15, column=0, sticky="w", pady=5)
         self.external_model_var = tk.StringVar(value="gpt-3.5-turbo")
         self.external_model_entry = ttk.Entry(main_frame, textvariable=self.external_model_var)
-        self.external_model_entry.grid(row=12, column=1, sticky="ew", pady=5)
+        self.external_model_entry.grid(row=15, column=1, sticky="ew", pady=5)
         
         # システムプロンプト設定
         ttk.Label(main_frame, text="System Prompt", font=("", 10, "bold")).grid(
-            row=13, column=0, columnspan=3, sticky="w", pady=(20, 10)
+            row=16, column=0, columnspan=3, sticky="w", pady=(20, 10)
         )
         
         # プロンプトタイプ選択
-        ttk.Label(main_frame, text="Prompt Type:").grid(row=14, column=0, sticky="w", pady=5)
-        self.prompt_type_var = tk.StringVar(value="coding")
+        ttk.Label(main_frame, text="Prompt Type:").grid(row=17, column=0, sticky="w", pady=5)
+        self.prompt_type_var = tk.StringVar(value="default")
         prompt_frame = ttk.Frame(main_frame)
-        prompt_frame.grid(row=14, column=1, columnspan=2, sticky="w", pady=5)
+        prompt_frame.grid(row=17, column=1, columnspan=2, sticky="w", pady=5)
         
         ttk.Radiobutton(
             prompt_frame,
-            text="Coding",
+            text="Default",
             variable=self.prompt_type_var,
-            value="coding",
-            command=self._update_prompt_preview
-        ).pack(side=tk.LEFT, padx=5)
-        
-        ttk.Radiobutton(
-            prompt_frame,
-            text="Explanation",
-            variable=self.prompt_type_var,
-            value="explanation",
+            value="default",
             command=self._update_prompt_preview
         ).pack(side=tk.LEFT, padx=5)
         
@@ -200,11 +283,11 @@ class SettingsDialog(tk.Toplevel):
             text="Edit Custom Prompt",
             command=self._edit_custom_prompt,
             width=22
-        ).grid(row=15, column=0, columnspan=2, sticky="w", pady=5)
+        ).grid(row=16, column=0, columnspan=2, sticky="w", pady=5)
         
         # ボタンフレーム
         button_frame = ttk.Frame(self)
-        button_frame.grid(row=1, column=0, sticky="ew", pady=10)
+        button_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
         
         ttk.Button(
             button_frame,
@@ -266,7 +349,27 @@ class SettingsDialog(tk.Toplevel):
         self.temperature_var.set(self.workbench.get_option("llm.temperature", 0.7))
         self.max_tokens_var.set(self.workbench.get_option("llm.max_tokens", 2048))
         self.skill_level_var.set(self.workbench.get_option("llm.skill_level", "beginner"))
-        self.prompt_type_var.set(self.workbench.get_option("llm.prompt_type", "coding"))
+        self.prompt_type_var.set(self.workbench.get_option("llm.prompt_type", "default"))
+        self.use_html_view_var.set(self.workbench.get_option("llm.use_html_view", True))
+        
+        # 言語設定を読み込む（デフォルトはThonnyの言語設定に従う）
+        default_language = "auto"
+        thonny_language = self.workbench.get_option("general.language", None)
+        if thonny_language and thonny_language.startswith("ja"):
+            default_language = "ja"
+        elif thonny_language and thonny_language.startswith("zh"):
+            if "TW" in thonny_language or "HK" in thonny_language:
+                default_language = "zh-TW"
+            else:
+                default_language = "zh-CN"
+        
+        saved_language = self.workbench.get_option("llm.output_language", default_language)
+        if saved_language == "other":
+            # カスタム言語コードも読み込む
+            self.custom_language_entry.delete(0, tk.END)
+            self.custom_language_entry.insert(0, self.workbench.get_option("llm.custom_language_code", ""))
+        self.output_language_var.set(saved_language)
+        self._on_language_changed()  # UIを更新
         
         # プロバイダー設定を読み込む
         self.provider_var.set(self.workbench.get_option("llm.provider", "local"))
@@ -296,6 +399,11 @@ class SettingsDialog(tk.Toplevel):
                 messagebox.showerror("Error", f"API key is required for {provider}!")
                 return
         
+        # HTMLビュー設定の変更をチェック（保存前に）
+        old_use_html = self.workbench.get_option("llm.use_html_view", True)
+        new_use_html = self.use_html_view_var.get()
+        html_view_changed = old_use_html != new_use_html
+        
         # 保存
         self.workbench.set_option("llm.provider", provider)
         self.workbench.set_option("llm.model_path", self.model_path_var.get())
@@ -304,6 +412,13 @@ class SettingsDialog(tk.Toplevel):
         self.workbench.set_option("llm.max_tokens", self.max_tokens_var.get())
         self.workbench.set_option("llm.skill_level", self.skill_level_var.get())
         self.workbench.set_option("llm.prompt_type", self.prompt_type_var.get())
+        self.workbench.set_option("llm.use_html_view", self.use_html_view_var.get())
+        
+        # 言語設定を保存
+        output_language = self.output_language_var.get()
+        self.workbench.set_option("llm.output_language", output_language)
+        if output_language == "other":
+            self.workbench.set_option("llm.custom_language_code", self.custom_language_entry.get())
         
         # プロバイダー設定を保存
         self.workbench.set_option("llm.api_key", self.api_key_var.get())
@@ -314,7 +429,17 @@ class SettingsDialog(tk.Toplevel):
             self.workbench.set_option("llm.custom_prompt", self.custom_prompt)
         
         self.settings_changed = True
-        messagebox.showinfo("Success", "Settings saved successfully!")
+        
+        # HTMLビュー設定が変更された場合は再起動を促す
+        if html_view_changed:
+            messagebox.showinfo(
+                "Restart Required", 
+                "The Markdown view setting change will take effect after restarting the LLM Assistant view.\n\n"
+                "Close and reopen the LLM Assistant from Tools menu."
+            )
+        else:
+            messagebox.showinfo("Success", "Settings saved successfully!")
+        
         self.destroy()
     
     def _test_model(self):
@@ -423,8 +548,8 @@ class SettingsDialog(tk.Toplevel):
         # 現在のパスが無効な場合、利用可能なモデルを設定
         current_path = self.model_path_var.get()
         if not current_path or not Path(current_path).exists():
-            # 解説用モデルを優先
-            new_path = manager.get_model_path("explanation")
+            # 軽量モデルを優先
+            new_path = manager.get_model_path("llama3.2-1b")
             if new_path:
                 self.model_path_var.set(new_path)
                 self.settings_changed = True
@@ -483,29 +608,17 @@ Example customizations:
             self.prompt_type_var.set("custom")
             dialog.destroy()
         
-        def load_template(template_type):
-            if template_type == "coding":
-                from ..llm_client import LLMClient
-                client = LLMClient()
-                text_editor.delete("1.0", tk.END)
-                text_editor.insert("1.0", client.coding_system_prompt)
-            elif template_type == "explanation":
-                from ..llm_client import LLMClient
-                client = LLMClient()
-                text_editor.delete("1.0", tk.END)
-                text_editor.insert("1.0", client.explanation_system_prompt)
+        def load_default_template():
+            from ..llm_client import LLMClient
+            client = LLMClient()
+            text_editor.delete("1.0", tk.END)
+            text_editor.insert("1.0", client.default_system_prompt)
         
         # テンプレートボタン
         ttk.Button(
             button_frame,
-            text="Load Coding Template",
-            command=lambda: load_template("coding")
-        ).pack(side=tk.LEFT, padx=5)
-        
-        ttk.Button(
-            button_frame,
-            text="Load Explanation Template",
-            command=lambda: load_template("explanation")
+            text="Load Default Template",
+            command=load_default_template
         ).pack(side=tk.LEFT, padx=5)
         
         # 保存・キャンセルボタン
@@ -520,6 +633,28 @@ Example customizations:
             text="Cancel",
             command=dialog.destroy
         ).pack(side=tk.RIGHT)
+    
+    def _on_language_changed(self, event=None):
+        """言語変更時の処理"""
+        language = self.output_language_var.get()
+        
+        # 言語名を表示
+        language_names = {
+            "auto": "Auto (Follow Thonny)",
+            "ja": "日本語",
+            "en": "English",
+            "zh-CN": "中文（简体）",
+            "zh-TW": "中文（繁體）",
+            "other": "Other..."
+        }
+        
+        self.language_label.config(text=language_names.get(language, ""))
+        
+        # Other...を選択した場合はカスタム入力欄を表示
+        if language == "other":
+            self.custom_language_frame.grid(row=10, column=1, columnspan=2, sticky="w", pady=5)
+        else:
+            self.custom_language_frame.grid_remove()
     
     def _on_provider_changed(self, event=None):
         """プロバイダー変更時の処理"""
@@ -562,3 +697,42 @@ Example customizations:
                 self.external_model_label.grid()
                 self.external_model_entry.grid()
                 self.external_model_var.set("meta-llama/llama-3.2-3b-instruct:free")
+    
+    def _adjust_window_size(self):
+        """ウィンドウサイズをコンテンツに合わせて調整"""
+        # コンテンツのサイズを取得
+        self.update_idletasks()
+        
+        # スクロール可能フレームの実際のサイズを取得
+        content_width = self.scrollable_frame.winfo_reqwidth() + 20  # スクロールバー分を追加
+        content_height = self.scrollable_frame.winfo_reqheight() + 80  # ボタンエリア分を追加
+        
+        # 画面サイズを取得
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        
+        # 最大サイズを画面の80%に制限
+        max_width = int(screen_width * 0.8)
+        max_height = int(screen_height * 0.8)
+        
+        # 最小サイズを設定
+        min_width = 600
+        min_height = 400
+        
+        # 実際のウィンドウサイズを決定
+        window_width = max(min_width, min(content_width, max_width))
+        window_height = max(min_height, min(content_height, max_height))
+        
+        # ウィンドウを中央に配置
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        
+        self.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    
+    def _on_close(self):
+        """ウィンドウを閉じる時の処理"""
+        # マウスホイールのバインディングを解除
+        self.unbind_all("<MouseWheel>")
+        self.unbind_all("<Button-4>")
+        self.unbind_all("<Button-5>")
+        self.destroy()
