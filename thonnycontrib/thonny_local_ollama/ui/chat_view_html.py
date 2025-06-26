@@ -147,6 +147,7 @@ class LLMChatViewHTML(ttk.Frame):
         self.html_frame = HtmlFrame(self, messages_enabled=False, javascript_enabled=True)
         self.html_frame.grid(row=1, column=0, sticky="nsew", padx=3, pady=2)
         
+        
         # URL変更のハンドラーを設定（Insert機能用）
         self.html_frame.on_url_change = self._handle_url_change
         
@@ -154,7 +155,7 @@ class LLMChatViewHTML(ttk.Frame):
         self._setup_js_interface()
         
         # 初期HTMLを設定
-        self._update_html()
+        self._update_html(full_reload=True)
         
         # 入力エリア
         input_frame = ttk.Frame(self)
@@ -304,9 +305,6 @@ class LLMChatViewHTML(ttk.Frame):
             html_content = self.markdown_renderer.get_full_html(self.messages)
             self.html_frame.load_html(html_content)
             
-            # スクロールを最下部に（少し遅延を入れて確実に）
-            self.after(100, self._scroll_to_bottom)
-            self.after(300, self._scroll_to_bottom)  # 念のため2回目
         else:
             # ストリーミング中は最後のメッセージのみ更新（再読み込みしない）
             if self.messages and self.messages[-1][0] == "assistant":
@@ -317,7 +315,6 @@ class LLMChatViewHTML(ttk.Frame):
                 )
                 # JavaScriptで最後のメッセージのみ更新
                 self._update_last_message_js(last_message_html)
-            self._scroll_to_bottom()
     
     def _update_last_message_js(self, message_html):
         """JavaScriptで最後のメッセージのみ更新"""
@@ -353,16 +350,6 @@ class LLMChatViewHTML(ttk.Frame):
                 if (typeof pyInsertCode !== 'undefined' && typeof pyCopyCode !== 'undefined') {{
                     console.log('JavaScript API is available for new buttons');
                 }}
-                
-                // スクロールを最下部に（ストリーミング中は即座に）
-                if (window.scrollToBottom) {{
-                    window.scrollToBottom(false);  // falseで即座にスクロール
-                }} else {{
-                    window.scrollTo({{
-                        top: document.body.scrollHeight,
-                        behavior: 'auto'
-                    }});
-                }}
             }})();
             """
             self.html_frame.run_javascript(js_code)
@@ -372,24 +359,39 @@ class LLMChatViewHTML(ttk.Frame):
             # エラーの場合はフォールバックとして完全更新
             self._update_html(full_reload=True)
     
-    def _scroll_to_bottom(self):
-        """HTMLフレームを最下部にスクロール"""
+    def _append_message_js(self, sender: str, text: str):
+        """JavaScriptで新しいメッセージを追加"""
         try:
-            # JavaScriptを実行してスクロール（スムーズスクロール）
-            js_code = """
-            if (window.scrollToBottom) {
-                window.scrollToBottom();
-            } else {
-                window.scrollTo({
-                    top: document.body.scrollHeight,
-                    behavior: 'smooth'
-                });
-            }
+            # HTMLを生成
+            message_html = self.markdown_renderer.render(text, sender)
+            
+            # HTMLをJavaScript文字列としてエスケープ
+            escaped_html = (message_html
+                .replace('\\', '\\\\')
+                .replace('\n', '\\n')
+                .replace('\r', '\\r')
+                .replace('"', '\\"')
+                .replace('</script>', '<\\/script>'))
+            
+            js_code = f"""
+            (function() {{
+                var messagesDiv = document.getElementById('messages');
+                if (!messagesDiv) {{
+                    console.error('Messages container not found');
+                    return;
+                }}
+                
+                // 新しいメッセージを追加
+                messagesDiv.insertAdjacentHTML('beforeend', "{escaped_html}");
+            }})();
             """
             self.html_frame.run_javascript(js_code)
             
         except Exception as e:
-            logger.debug(f"Could not scroll to bottom: {e}")
+            logger.error(f"Could not append message: {e}")
+            # エラーの場合はフォールバックとして完全更新
+            self._update_html(full_reload=True)
+    
     
     def _init_llm(self):
         """LLMクライアントを初期化"""
@@ -468,7 +470,9 @@ class LLMChatViewHTML(ttk.Frame):
     def _add_message(self, sender: str, text: str):
         """メッセージを追加してHTMLを更新"""
         self.messages.append((sender, text))
-        self._update_html()
+        
+        # JavaScriptで新しいメッセージを追加（全体再読み込みを避ける）
+        self._append_message_js(sender, text)
         
         # ユーザーとアシスタントのメッセージのみ保存（システムメッセージは一時的なものが多いため）
         if sender in ["user", "assistant"]:
@@ -828,7 +832,7 @@ Based on this context, {message}"""
         """チャットをクリア"""
         self.messages.clear()
         self._current_message = ""
-        self._update_html()
+        self._update_html(full_reload=True)  # クリア時は全体再読み込み
         # 履歴もクリア
         self._save_chat_history()
     
@@ -880,7 +884,7 @@ Based on this context, {message}"""
                     self.messages.append((msg["sender"], msg["text"]))
                 
                 if self.messages:
-                    self._update_html()
+                    self._update_html(full_reload=True)  # 履歴読み込み時は全体更新が必要
                     self._add_message("system", tr("Previous conversation restored"))
                     
         except Exception as e:
