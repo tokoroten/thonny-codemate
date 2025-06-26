@@ -74,9 +74,12 @@ class LLMChatView(ttk.Frame):
         )
         self.settings_button.pack(side=tk.RIGHT, padx=2)
         
-        # ステータスラベル
-        self.status_label = ttk.Label(header_frame, text="Not loaded", foreground="gray")
-        self.status_label.pack(side=tk.RIGHT, padx=5)
+        # ステータスフレーム（モデル名とステータス）
+        status_frame = ttk.Frame(header_frame)
+        status_frame.pack(side=tk.RIGHT, padx=5)
+        
+        self.status_label = ttk.Label(status_frame, text="Not loaded", foreground="gray")
+        self.status_label.pack(side=tk.RIGHT)
         
         # チャット表示エリア
         chat_frame = ttk.Frame(self)
@@ -193,7 +196,7 @@ class LLMChatView(ttk.Frame):
                         model_path = available_model
                     else:
                         # モデルがない場合はダウンロードを促す
-                        self.status_label.config(text="No model", foreground="red")
+                        self.status_label.config(text="No model loaded", foreground="red")
                         self._append_message(
                             "System",
                             "No model found. Please download a model from Settings → Download Models.",
@@ -211,11 +214,15 @@ class LLMChatView(ttk.Frame):
                         return
                 
                 # 非同期でモデルをロード
-                self.status_label.config(text="Loading model...", foreground="orange")
+                # モデル名を表示しながらロード
+                model_name = Path(model_path).name if model_path else "model"
+                self.status_label.config(text=f"Loading {model_name}...", foreground="orange")
                 self.llm_client.load_model_async(callback=self._on_model_loaded)
             else:
-                # 外部プロバイダーの場合
-                self.status_label.config(text=f"Using {provider}", foreground="blue")
+                # 外部プロバイダーの場合、モデル名も含める
+                external_model = workbench.get_option("llm.external_model", "")
+                display_text = f"{external_model} ({provider})" if external_model else f"Using {provider}"
+                self.status_label.config(text=display_text, foreground="blue")
                 # config取得で外部プロバイダーが設定される
                 self.llm_client.get_config()
                 self.send_button.config(state=tk.NORMAL)
@@ -227,14 +234,17 @@ class LLMChatView(ttk.Frame):
             
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
-            self.status_label.config(text="Error", foreground="red")
+            self.status_label.config(text="Error loading model", foreground="red")
             self._append_message("System", f"Failed to initialize LLM: {str(e)}", "error")
     
     def _on_model_loaded(self, success: bool, error: Optional[Exception]):
         """モデル読み込み完了時のコールバック"""
         def update_ui():
             if success:
-                self.status_label.config(text="Ready", foreground="green")
+                # モデル名を取得
+                model_path = get_workbench().get_option("llm.model_path", "")
+                model_name = Path(model_path).name if model_path else "Unknown"
+                self.status_label.config(text=f"{model_name} | Ready", foreground="green")
                 self.send_button.config(state=tk.NORMAL)
                 self._append_message("System", "LLM model loaded successfully!", "assistant")
             else:
