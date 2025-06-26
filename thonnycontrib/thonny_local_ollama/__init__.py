@@ -5,6 +5,7 @@ GitHub Copilot風のローカルLLM統合を提供するThonnyプラグイン
 import logging
 import sys
 from typing import Optional
+from pathlib import Path
 from .i18n import tr
 
 # ログを完全に無効化（Thonny環境での問題を回避）
@@ -162,6 +163,7 @@ def load_plugin():
         workbench.set_default("llm.skill_level", "beginner")
         workbench.set_default("llm.auto_load", False)
         workbench.set_default("llm.use_html_view", True)
+        workbench.set_default("llm.repeat_penalty", 1.1)
         
         _plugin_loaded = True
         try:
@@ -316,7 +318,19 @@ def generate_from_comment_handler():
         else:
             # 直接メッセージを送信
             if chat_view:
-                prompt = f"Generate Python code based on this comment:\n\n{comment_text}\n\nProvide only the code implementation without explanations."
+                # ファイルから言語を検出
+                filename = editor.get_filename()
+                lang = 'Python'  # デフォルト
+                if filename:
+                    file_ext = Path(filename).suffix.lower()
+                    lang_map = {
+                        '.py': 'Python', '.js': 'JavaScript', '.java': 'Java',
+                        '.cpp': 'C++', '.c': 'C', '.cs': 'C#', '.rb': 'Ruby',
+                        '.go': 'Go', '.rs': 'Rust', '.php': 'PHP'
+                    }
+                    lang = lang_map.get(file_ext, 'Python')
+                
+                prompt = f"Generate {lang} code based on this comment:\n\n{comment_text}\n\nProvide only the code implementation without explanations."
                 chat_view.input_text.delete("1.0", "end")
                 chat_view.input_text.insert("1.0", prompt)
                 chat_view._send_message()

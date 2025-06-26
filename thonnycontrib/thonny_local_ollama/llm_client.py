@@ -57,28 +57,26 @@ class LLMClient:
         self._external_provider = None
         
         # デフォルトシステムプロンプト（統合版）
-        self.default_system_prompt = """You are an expert Python programming assistant integrated into Thonny IDE, designed to help users learn and write better code.
+        self.default_system_prompt = """You are an expert programming assistant integrated into Thonny IDE.
 
-Your responsibilities:
-1. Generate correct, idiomatic Python code that follows PEP 8 style guidelines
-2. Explain code and programming concepts clearly and patiently
-3. Adapt your responses to the user's skill level (beginner, intermediate, or advanced)
-4. Consider edge cases and error handling in implementations
-5. Encourage good programming practices and habits
+Core principles:
+- Be concise and direct in your responses
+- Provide code examples without lengthy explanations unless asked
+- Focus on solving the immediate problem
+- Adapt complexity to user's skill level
+- Detect and work with the programming language being used
 
 When generating code:
-- Write readable, maintainable code with clear variable names
-- Include appropriate comments and docstrings
-- Handle common edge cases (empty inputs, None values, etc.)
-- Prefer simple, clear solutions over complex ones unless complexity is justified
+- Write clean, readable code following the language's best practices
+- Include only essential comments
+- Handle edge cases appropriately
 
-When explaining concepts:
-- Break down complex ideas into simple, understandable parts
-- Use analogies and real-world examples when helpful
-- Explain not just "what" but also "why" something works
-- Point out potential improvements or alternatives
+When explaining:
+- Keep explanations brief and to the point
+- Use simple language for beginners
+- Provide more detail only when specifically requested
 
-Remember: You're helping users both solve immediate problems and become better programmers. Balance practical solutions with educational value."""
+Remember: Prioritize clarity and brevity. Get straight to the solution."""
 
         # デフォルトプロンプトを使用
         self.system_prompt = self.default_system_prompt
@@ -123,6 +121,7 @@ Remember: You're helping users both solve immediate problems and become better p
                 n_ctx=workbench.get_option("llm.context_size", 4096),
                 temperature=workbench.get_option("llm.temperature", 0.7),
                 max_tokens=workbench.get_option("llm.max_tokens", 2048),
+                repeat_penalty=workbench.get_option("llm.repeat_penalty", 1.1),
             )
             
             # プロンプトタイプを適用
@@ -137,6 +136,63 @@ Remember: You're helping users both solve immediate problems and become better p
                 self.use_default_prompt()
         
         return self._config
+    
+    def _detect_programming_language(self) -> str:
+        """現在のエディタファイルからプログラミング言語を検出"""
+        try:
+            from thonny import get_workbench
+            workbench = get_workbench()
+            editor = workbench.get_editor_notebook().get_current_editor()
+            
+            if editor:
+                filename = editor.get_filename()
+                if filename:
+                    file_ext = Path(filename).suffix.lower()
+                    # ファイル拡張子から言語を判定
+                    language_map = {
+                        '.py': 'Python',
+                        '.pyw': 'Python',
+                        '.js': 'JavaScript',
+                        '.ts': 'TypeScript',
+                        '.java': 'Java',
+                        '.c': 'C',
+                        '.cpp': 'C++',
+                        '.cc': 'C++',
+                        '.cxx': 'C++',
+                        '.h': 'C/C++',
+                        '.hpp': 'C++',
+                        '.cs': 'C#',
+                        '.rb': 'Ruby',
+                        '.go': 'Go',
+                        '.rs': 'Rust',
+                        '.php': 'PHP',
+                        '.html': 'HTML',
+                        '.htm': 'HTML',
+                        '.css': 'CSS',
+                        '.xml': 'XML',
+                        '.json': 'JSON',
+                        '.yaml': 'YAML',
+                        '.yml': 'YAML',
+                        '.md': 'Markdown',
+                        '.sh': 'Shell/Bash',
+                        '.bash': 'Bash',
+                        '.r': 'R',
+                        '.sql': 'SQL',
+                        '.swift': 'Swift',
+                        '.kt': 'Kotlin',
+                        '.scala': 'Scala',
+                        '.lua': 'Lua',
+                        '.pl': 'Perl',
+                        '.m': 'MATLAB/Objective-C',
+                        '.vb': 'Visual Basic',
+                        '.dart': 'Dart',
+                        '.jl': 'Julia'
+                    }
+                    return language_map.get(file_ext, 'Python')  # デフォルトはPython
+        except Exception:
+            pass
+        
+        return 'Python'  # エラー時のデフォルト
     
     def _get_language_instruction(self) -> str:
         """言語設定に基づく指示を取得"""
@@ -180,29 +236,36 @@ Remember: You're helping users both solve immediate problems and become better p
         # 基本のシステムプロンプトを取得
         base_prompt = self.system_prompt
         
+        # プログラミング言語を検出
+        prog_language = self._detect_programming_language()
+        
         # プロンプトタイプを確認
         prompt_type = workbench.get_option("llm.prompt_type", "default")
         if prompt_type == "custom":
-            # カスタムプロンプトの場合は、言語指示のみ追加
+            # カスタムプロンプトの場合は、プログラミング言語と出力言語指示のみ追加
+            enhanced_prompt = base_prompt + f"\n\nCurrent programming language: {prog_language}"
             language_instruction = self._get_language_instruction()
             if language_instruction:
-                return base_prompt + language_instruction
-            return base_prompt
+                enhanced_prompt += language_instruction
+            return enhanced_prompt
         
-        # デフォルトプロンプトの場合は、スキルレベルと言語を統合
+        # デフォルトプロンプトの場合は、スキルレベル、プログラミング言語、出力言語を統合
         skill_level = workbench.get_option("llm.skill_level", "beginner")
+        
+        # プログラミング言語の指示を追加
+        enhanced_prompt = base_prompt + f"\n\nCurrent programming language: {prog_language}"
         
         # スキルレベルの説明を追加
         skill_instructions = {
-            "beginner": "\n\nIMPORTANT: The user is a beginner programmer. Use simple language, avoid complex jargon, explain basic concepts thoroughly, and provide plenty of examples.",
-            "intermediate": "\n\nIMPORTANT: The user has intermediate programming knowledge. You can use technical terms but should still explain complex concepts. Focus on best practices and common patterns.",
-            "advanced": "\n\nIMPORTANT: The user is an experienced programmer. You can use advanced concepts, focus on optimization, design patterns, and sophisticated solutions. Be concise and technical."
+            "beginner": "\n\nIMPORTANT: The user is a beginner. Use very simple language, avoid jargon, give short clear examples.",
+            "intermediate": "\n\nIMPORTANT: The user has intermediate knowledge. Be concise, use technical terms when appropriate.",
+            "advanced": "\n\nIMPORTANT: The user is experienced. Be extremely concise and technical. Skip basic explanations."
         }
         
         # スキルレベルの指示を追加
-        enhanced_prompt = base_prompt + skill_instructions.get(skill_level, "")
+        enhanced_prompt += skill_instructions.get(skill_level, "")
         
-        # 言語指示を追加
+        # 出力言語指示を追加
         language_instruction = self._get_language_instruction()
         if language_instruction:
             enhanced_prompt += language_instruction
@@ -459,18 +522,17 @@ Remember: You're helping users both solve immediate problems and become better p
             "advanced": "an experienced programmer"
         }
         
-        prompt = f"""Please explain the following Python code for {skill_descriptions.get(skill_level, skill_descriptions['beginner'])}:
+        # プログラミング言語を検出
+        prog_language = self._detect_programming_language()
+        lang_lower = prog_language.lower()
+        
+        prompt = f"""Explain this {prog_language} code for {skill_descriptions.get(skill_level, skill_descriptions['beginner'])}:
 
-```python
+```{lang_lower}
 {code}
 ```
 
-Provide a clear, educational explanation that helps them understand:
-1. What the code does overall
-2. How each important part works
-3. Any important concepts or patterns used
-
-Keep the explanation concise but thorough."""
+Be concise. Focus on what the code does and key concepts."""
         
         return self.generate(prompt, temperature=0.3)  # 低めの温度で一貫性のある説明を生成
     
@@ -485,23 +547,25 @@ Keep the explanation concise but thorough."""
         Returns:
             修正提案
         """
-        prompt = f"""The following Python code has an error:
+        # プログラミング言語を検出
+        prog_language = self._detect_programming_language()
+        lang_lower = prog_language.lower()
+        
+        prompt = f"""Fix this {prog_language} error:
 
-```python
+```{lang_lower}
 {code}
 ```
 
-Error message:
+Error:
 ```
 {error_message}
 ```
 
-Please:
-1. Explain what causes this error
-2. Provide the corrected code
-3. Explain what was changed and why
-
-Format your response clearly with the corrected code in a code block."""
+Provide:
+1. Brief explanation of the error
+2. Corrected code
+3. What changed"""
         
         return self.generate(prompt, temperature=0.3)
     

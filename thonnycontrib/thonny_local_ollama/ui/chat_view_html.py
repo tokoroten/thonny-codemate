@@ -380,7 +380,34 @@ class LLMChatViewHTML(ttk.Frame):
         
         # UIをクリア
         self.input_text.delete("1.0", tk.END)
-        self._add_message("user", message)
+        
+        # コンテキスト情報を取得
+        context_info = None
+        if self.context_var.get() and self.context_manager:
+            workbench = get_workbench()
+            editor = workbench.get_editor_notebook().get_current_editor()
+            if editor:
+                current_file = editor.get_filename()
+                text_widget = editor.get_text_widget()
+                
+                if text_widget.tag_ranges("sel"):
+                    # 選択範囲がある場合
+                    start_line = int(text_widget.index("sel.first").split(".")[0])
+                    end_line = int(text_widget.index("sel.last").split(".")[0])
+                    file_name = Path(current_file).name if current_file else "Unknown"
+                    context_info = f"Context: {file_name} (lines {start_line}-{end_line})"
+                elif current_file:
+                    # ファイル全体の場合
+                    file_name = Path(current_file).name
+                    context_info = f"Context: {file_name} (entire file)"
+        
+        # ユーザーメッセージを追加（コンテキスト情報付き）
+        if context_info:
+            display_message = f"{message}\n\n[{context_info}]"
+        else:
+            display_message = message
+        
+        self._add_message("user", display_message)
         
         # 処理中フラグ
         self._processing = True
@@ -391,7 +418,7 @@ class LLMChatViewHTML(ttk.Frame):
         # バックグラウンドで処理
         thread = threading.Thread(
             target=self._generate_response,
-            args=(message,),
+            args=(message,),  # 元のメッセージを渡す（コンテキスト情報なし）
             daemon=True
         )
         thread.start()
@@ -418,24 +445,34 @@ class LLMChatViewHTML(ttk.Frame):
                         selection_info = f"Selected lines: {start_line}-{end_line}"
                 
                 if selected_text:
+                    # ファイル拡張子から言語を判定
+                    file_ext = Path(current_file).suffix.lower() if current_file else '.py'
+                    lang_map = {'.py': 'python', '.js': 'javascript', '.java': 'java', '.cpp': 'cpp', '.c': 'c'}
+                    lang = lang_map.get(file_ext, 'python')
+                    
                     context_str = f"""File: {Path(current_file).name if current_file else 'Unknown'}
 {selection_info}
 
-```python
+```{lang}
 {selected_text}
 ```"""
-                    self.message_queue.put(("info", "Using selected text as context"))
+                    # コンテキスト使用メッセージは不要
                 elif editor and current_file:
                     # 選択範囲がない場合は、ファイル全体を取得
                     full_text = text_widget.get("1.0", tk.END).strip()
                     if full_text:
+                        # ファイル拡張子から言語を判定
+                        file_ext = Path(current_file).suffix.lower()
+                        lang_map = {'.py': 'python', '.js': 'javascript', '.java': 'java', '.cpp': 'cpp', '.c': 'c'}
+                        lang = lang_map.get(file_ext, 'python')
+                        
                         context_str = f"""File: {Path(current_file).name}
 Full file content:
 
-```python
+```{lang}
 {full_text}
 ```"""
-                        self.message_queue.put(("info", "Using entire file as context"))
+                        # コンテキスト使用メッセージは不要
                     else:
                         context_str = None
                 else:
@@ -551,7 +588,18 @@ Based on this context, {message}"""
     
     def explain_code(self, code: str):
         """コードを説明（外部から呼ばれる）"""
-        message = f"Please explain this code:\n```python\n{code}\n```"
+        # 現在のファイルから言語を検出
+        workbench = get_workbench()
+        editor = workbench.get_editor_notebook().get_current_editor()
+        lang = 'python'  # デフォルト
+        if editor:
+            filename = editor.get_filename()
+            if filename:
+                file_ext = Path(filename).suffix.lower()
+                lang_map = {'.py': 'python', '.js': 'javascript', '.java': 'java', '.cpp': 'cpp', '.c': 'c'}
+                lang = lang_map.get(file_ext, 'python')
+        
+        message = f"Please explain this code:\n```{lang}\n{code}\n```"
         self.input_text.delete("1.0", tk.END)
         self.input_text.insert("1.0", message)
         self._send_message()
@@ -634,44 +682,6 @@ Based on this context, {message}"""
             if not self.context_manager:
                 from ..context_manager import ContextManager
                 self.context_manager = ContextManager()
-            
-            workbench = get_workbench()
-            editor = workbench.get_editor_notebook().get_current_editor()
-            current_file = None
-            
-            if editor:
-                current_file = editor.get_filename()
-                text_widget = editor.get_text_widget()
-                
-                if text_widget.tag_ranges("sel"):
-                    start_line = int(text_widget.index("sel.first").split(".")[0])
-                    end_line = int(text_widget.index("sel.last").split(".")[0])
-                    selected_range = f"lines {start_line}-{end_line}"
-            
-            try:
-                if current_file:
-                    file_info = f"Current file: {Path(current_file).name}"
-                    
-                    if 'selected_range' in locals():
-                        self._add_message(
-                            "system",
-                            f"{tr('Context enabled for selected text')}\n{file_info} - {selected_range}"
-                        )
-                    else:
-                        contexts = self.context_manager.get_project_context(current_file)
-                        summary = self.context_manager.get_context_summary()
-                        self._add_message(
-                            "system",
-                            f"{tr('Context enabled for current file')}\n{file_info} - {summary['total_classes']} classes, {summary['total_functions']} functions"
-                        )
-                else:
-                    self._add_message("system", tr("Context enabled but no file is currently open"))
-                    
-            except Exception as e:
-                logger.error(f"Error analyzing context: {e}")
-                self._add_message("system", f"Error analyzing context: {str(e)}")
-        else:
-            self._add_message("system", tr("Context disabled"))
     
     def _get_chat_history_path(self) -> Path:
         """チャット履歴ファイルのパスを取得"""

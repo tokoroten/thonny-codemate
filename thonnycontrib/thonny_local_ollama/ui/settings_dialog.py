@@ -146,13 +146,42 @@ class SettingsDialog(tk.Toplevel):
         )
         tokens_spinbox.grid(row=5, column=1, sticky="w", pady=5)
         
+        # Repeat Penalty
+        ttk.Label(main_frame, text="Repeat Penalty:").grid(row=6, column=0, sticky="w", pady=5)
+        self.repeat_penalty_var = tk.DoubleVar(value=1.1)
+        repeat_penalty_scale = ttk.Scale(
+            main_frame,
+            from_=1.0,
+            to=2.0,
+            orient=tk.HORIZONTAL,
+            variable=self.repeat_penalty_var
+        )
+        repeat_penalty_scale.grid(row=6, column=1, sticky="ew", pady=5)
+        
+        self.repeat_penalty_label = ttk.Label(main_frame, text="1.1")
+        self.repeat_penalty_label.grid(row=6, column=2, pady=5)
+        
+        # Repeat Penalty値の更新
+        def update_repeat_penalty_label(value):
+            self.repeat_penalty_label.config(text=f"{float(value):.2f}")
+        repeat_penalty_scale.config(command=update_repeat_penalty_label)
+        
+        # Repeat Penaltyのヒント
+        repeat_hint = ttk.Label(
+            main_frame,
+            text="Higher values reduce repetition (1.3+ recommended for small models)",
+            font=("", 8),
+            foreground="gray"
+        )
+        repeat_hint.grid(row=7, column=1, columnspan=2, sticky="w", pady=(0, 10))
+        
         # ユーザー設定
         ttk.Label(main_frame, text="User Settings", font=("", 10, "bold")).grid(
-            row=6, column=0, columnspan=3, sticky="w", pady=(20, 10)
+            row=8, column=0, columnspan=3, sticky="w", pady=(20, 10)
         )
         
         # スキルレベル
-        ttk.Label(main_frame, text="Skill Level:").grid(row=7, column=0, sticky="w", pady=5)
+        ttk.Label(main_frame, text="Skill Level:").grid(row=9, column=0, sticky="w", pady=5)
         self.skill_level_var = tk.StringVar(value="beginner")
         skill_combo = ttk.Combobox(
             main_frame,
@@ -161,20 +190,20 @@ class SettingsDialog(tk.Toplevel):
             state="readonly",
             width=15
         )
-        skill_combo.grid(row=7, column=1, sticky="w", pady=5)
+        skill_combo.grid(row=9, column=1, sticky="w", pady=5)
         
         # Markdownレンダリング
-        ttk.Label(main_frame, text="Use Markdown View:").grid(row=8, column=0, sticky="w", pady=5)
+        ttk.Label(main_frame, text="Use Markdown View:").grid(row=10, column=0, sticky="w", pady=5)
         self.use_html_view_var = tk.BooleanVar(value=True)
         html_check = ttk.Checkbutton(
             main_frame,
             text="Enable Markdown rendering (requires tkinterweb)",
             variable=self.use_html_view_var
         )
-        html_check.grid(row=8, column=1, sticky="w", pady=5)
+        html_check.grid(row=10, column=1, sticky="w", pady=5)
         
         # 出力言語
-        ttk.Label(main_frame, text="Output Language:").grid(row=9, column=0, sticky="w", pady=5)
+        ttk.Label(main_frame, text="Output Language:").grid(row=11, column=0, sticky="w", pady=5)
         self.output_language_var = tk.StringVar(value="auto")
         
         # 言語オプション
@@ -188,7 +217,7 @@ class SettingsDialog(tk.Toplevel):
         ]
         
         language_frame = ttk.Frame(main_frame)
-        language_frame.grid(row=9, column=1, columnspan=2, sticky="w", pady=5)
+        language_frame.grid(row=11, column=1, columnspan=2, sticky="w", pady=5)
         
         self.language_combo = ttk.Combobox(
             language_frame,
@@ -213,11 +242,11 @@ class SettingsDialog(tk.Toplevel):
         
         # 外部プロバイダー設定
         ttk.Label(main_frame, text="Provider Settings", font=("", 10, "bold")).grid(
-            row=11, column=0, columnspan=3, sticky="w", pady=(20, 10)
+            row=13, column=0, columnspan=3, sticky="w", pady=(20, 10)
         )
         
         # プロバイダー選択
-        ttk.Label(main_frame, text="Provider:").grid(row=12, column=0, sticky="w", pady=5)
+        ttk.Label(main_frame, text="Provider:").grid(row=14, column=0, sticky="w", pady=5)
         self.provider_var = tk.StringVar(value="local")
         provider_combo = ttk.Combobox(
             main_frame,
@@ -226,40 +255,40 @@ class SettingsDialog(tk.Toplevel):
             state="readonly",
             width=15
         )
-        provider_combo.grid(row=12, column=1, sticky="w", pady=5)
+        provider_combo.grid(row=14, column=1, sticky="w", pady=5)
         provider_combo.bind("<<ComboboxSelected>>", self._on_provider_changed)
         
         # APIキー（外部プロバイダー用）
         self.api_key_label = ttk.Label(main_frame, text="API Key:")
-        self.api_key_label.grid(row=13, column=0, sticky="w", pady=5)
+        self.api_key_label.grid(row=15, column=0, sticky="w", pady=5)
         self.api_key_var = tk.StringVar()
         self.api_key_entry = ttk.Entry(main_frame, textvariable=self.api_key_var, show="*")
-        self.api_key_entry.grid(row=13, column=1, sticky="ew", pady=5)
+        self.api_key_entry.grid(row=15, column=1, sticky="ew", pady=5)
         
         # ベースURL（Ollama用）
         self.base_url_label = ttk.Label(main_frame, text="Base URL:")
-        self.base_url_label.grid(row=14, column=0, sticky="w", pady=5)
+        self.base_url_label.grid(row=16, column=0, sticky="w", pady=5)
         self.base_url_var = tk.StringVar(value="http://localhost:11434")
         self.base_url_entry = ttk.Entry(main_frame, textvariable=self.base_url_var)
-        self.base_url_entry.grid(row=14, column=1, sticky="ew", pady=5)
+        self.base_url_entry.grid(row=16, column=1, sticky="ew", pady=5)
         
         # 外部モデル名
         self.external_model_label = ttk.Label(main_frame, text="Model Name:")
-        self.external_model_label.grid(row=15, column=0, sticky="w", pady=5)
+        self.external_model_label.grid(row=17, column=0, sticky="w", pady=5)
         self.external_model_var = tk.StringVar(value="gpt-3.5-turbo")
         self.external_model_entry = ttk.Entry(main_frame, textvariable=self.external_model_var)
-        self.external_model_entry.grid(row=15, column=1, sticky="ew", pady=5)
+        self.external_model_entry.grid(row=17, column=1, sticky="ew", pady=5)
         
         # システムプロンプト設定
         ttk.Label(main_frame, text="System Prompt", font=("", 10, "bold")).grid(
-            row=16, column=0, columnspan=3, sticky="w", pady=(20, 10)
+            row=18, column=0, columnspan=3, sticky="w", pady=(20, 10)
         )
         
         # プロンプトタイプ選択
-        ttk.Label(main_frame, text="Prompt Type:").grid(row=17, column=0, sticky="w", pady=5)
+        ttk.Label(main_frame, text="Prompt Type:").grid(row=19, column=0, sticky="w", pady=5)
         self.prompt_type_var = tk.StringVar(value="default")
         prompt_frame = ttk.Frame(main_frame)
-        prompt_frame.grid(row=17, column=1, columnspan=2, sticky="w", pady=5)
+        prompt_frame.grid(row=19, column=1, columnspan=2, sticky="w", pady=5)
         
         ttk.Radiobutton(
             prompt_frame,
@@ -283,7 +312,7 @@ class SettingsDialog(tk.Toplevel):
             text="Edit Custom Prompt",
             command=self._edit_custom_prompt,
             width=22
-        ).grid(row=16, column=0, columnspan=2, sticky="w", pady=5)
+        ).grid(row=20, column=0, columnspan=2, sticky="w", pady=5)
         
         # ボタンフレーム
         button_frame = ttk.Frame(self)
@@ -348,6 +377,7 @@ class SettingsDialog(tk.Toplevel):
         self.context_size_var.set(self.workbench.get_option("llm.context_size", 4096))
         self.temperature_var.set(self.workbench.get_option("llm.temperature", 0.7))
         self.max_tokens_var.set(self.workbench.get_option("llm.max_tokens", 2048))
+        self.repeat_penalty_var.set(self.workbench.get_option("llm.repeat_penalty", 1.1))
         self.skill_level_var.set(self.workbench.get_option("llm.skill_level", "beginner"))
         self.prompt_type_var.set(self.workbench.get_option("llm.prompt_type", "default"))
         self.use_html_view_var.set(self.workbench.get_option("llm.use_html_view", True))
@@ -410,6 +440,7 @@ class SettingsDialog(tk.Toplevel):
         self.workbench.set_option("llm.context_size", self.context_size_var.get())
         self.workbench.set_option("llm.temperature", self.temperature_var.get())
         self.workbench.set_option("llm.max_tokens", self.max_tokens_var.get())
+        self.workbench.set_option("llm.repeat_penalty", self.repeat_penalty_var.get())
         self.workbench.set_option("llm.skill_level", self.skill_level_var.get())
         self.workbench.set_option("llm.prompt_type", self.prompt_type_var.get())
         self.workbench.set_option("llm.use_html_view", self.use_html_view_var.get())
