@@ -34,9 +34,24 @@ dependencies = [
     "pythonmonkey>=0.2.0",
     "markdown>=3.5",
     "pygments>=2.17",
+    "llama-cpp-python>=0.2.0",
 ]
 
 [project.optional-dependencies]
+# CUDA版（NVIDIA GPU）
+cuda = [
+    # Note: This will reinstall llama-cpp-python with CUDA support
+    # Users should run: pip install thonny-local-ollama[cuda] --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+]
+# Metal版（macOS GPU）  
+metal = [
+    # Note: This will reinstall llama-cpp-python with Metal support
+    # Users on macOS should run: CMAKE_ARGS="-DLLAMA_METAL=on" pip install thonny-local-ollama[metal]
+]
+# 外部APIのみを使用する場合（llama-cpp-python不要）
+external-only = [
+    # 外部API（ChatGPT、Ollama、OpenRouter）のみを使用する場合は追加の依存関係なし
+]
 dev = [
     "pytest>=7.0",
     "debugpy>=1.6",
@@ -50,9 +65,9 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/thonny_local_ollama"
-Repository = "https://github.com/yourusername/thonny_local_ollama"
-Issues = "https://github.com/yourusername/thonny_local_ollama/issues"
+Homepage = "https://github.com/tokoroten/thonny_local_ollama"
+Repository = "https://github.com/tokoroten/thonny_local_ollama"
+Issues = "https://github.com/tokoroten/thonny_local_ollama/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

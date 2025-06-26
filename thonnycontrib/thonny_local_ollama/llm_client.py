@@ -6,6 +6,7 @@ import os
 import logging
 import threading
 import queue
+import platform
 from pathlib import Path
 from typing import Optional, Iterator, Dict, Any, List
 from dataclasses import dataclass
@@ -19,12 +20,71 @@ except ImportError:
     logger.addHandler(logging.NullHandler())
 
 
+def detect_gpu_availability() -> int:
+    """
+    GPUの利用可能性を検出し、推奨されるGPUレイヤー数を返す
+    
+    Returns:
+        int: GPU使用レイヤー数（0=CPU only, -1=全レイヤーをGPUに配置）
+    """
+    try:
+        # CUDA環境変数をチェック
+        cuda_visible_devices = os.environ.get('CUDA_VISIBLE_DEVICES', '')
+        if cuda_visible_devices == '-1':
+            logger.info("CUDA_VISIBLE_DEVICES=-1: GPU disabled by environment")
+            return 0
+        
+        # プラットフォームチェック
+        system = platform.system()
+        
+        if system == "Windows" or system == "Linux":
+            # NVIDIAドライバーの存在をチェック
+            try:
+                import subprocess
+                result = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    logger.info("NVIDIA GPU detected via nvidia-smi")
+                    return -1  # 全レイヤーをGPUに配置
+            except (FileNotFoundError, subprocess.SubprocessError):
+                pass
+        
+        elif system == "Darwin":  # macOS
+            # Apple Siliconの場合、Metalを使用可能
+            try:
+                import subprocess
+                result = subprocess.run(['system_profiler', 'SPDisplaysDataType'], 
+                                      capture_output=True, text=True)
+                if 'Metal' in result.stdout or 'M1' in result.stdout or 'M2' in result.stdout or 'M3' in result.stdout:
+                    logger.info("Apple Silicon GPU detected")
+                    return -1  # 全レイヤーをGPUに配置
+            except:
+                pass
+        
+        # llama-cpp-pythonのビルド情報をチェック
+        try:
+            from llama_cpp import llama_cpp
+            if hasattr(llama_cpp, 'GGML_USE_CUBLAS') and llama_cpp.GGML_USE_CUBLAS:
+                logger.info("llama-cpp-python built with CUDA support")
+                return -1
+            elif hasattr(llama_cpp, 'GGML_USE_METAL') and llama_cpp.GGML_USE_METAL:
+                logger.info("llama-cpp-python built with Metal support")
+                return -1
+        except:
+            pass
+        
+    except Exception as e:
+        logger.debug(f"Error detecting GPU: {e}")
+    
+    logger.info("No GPU detected, using CPU")
+    return 0
+
+
 @dataclass
 class ModelConfig:
     """モデル設定"""
     model_path: str
     n_ctx: int = 4096  # コンテキストサイズ
-    n_gpu_layers: int = 0  # GPU使用レイヤー数（0=CPU only）
+    n_gpu_layers: int = -2  # GPU使用レイヤー数（-2=自動検出, -1=全て, 0=CPU only）
     temperature: float = 0.3
     max_tokens: int = 2048
     top_p: float = 0.95
@@ -341,14 +401,28 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
                         "Please run: uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu"
                     )
                 
+                # GPU自動検出
+                n_gpu_layers = config.n_gpu_layers
+                if n_gpu_layers == -2:  # 自動検出
+                    n_gpu_layers = detect_gpu_availability()
+                    logger.info(f"Auto-detected GPU layers: {n_gpu_layers}")
+                
                 # モデルを読み込む
                 self._model = Llama(
                     model_path=config.model_path,
                     n_ctx=config.n_ctx,
-                    n_gpu_layers=config.n_gpu_layers,
+                    n_gpu_layers=n_gpu_layers,
                     n_threads=config.n_threads,
                     verbose=False,
                 )
+                
+                # 実際に使用されているGPUレイヤー数をログ出力
+                if n_gpu_layers > 0:
+                    logger.info(f"Model loaded with {n_gpu_layers} GPU layers")
+                elif n_gpu_layers == -1:
+                    logger.info("Model loaded with all layers on GPU")
+                else:
+                    logger.info("Model loaded on CPU")
                 
                 logger.info("Model loaded successfully")
                 return True

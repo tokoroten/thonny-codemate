@@ -20,10 +20,16 @@ Thonny IDEにローカルLLM機能を統合するプラグインです。llama-c
 
 ## インストール
 
-### PyPIから（準備中）
+### PyPIから
 ```bash
-pip install thonny-ollama
+# 標準インストール（CPU版のllama-cpp-pythonを含む）
+pip install thonny-local-ollama
 ```
+
+**GPUサポートについては**、[INSTALL_GPU.md](INSTALL_GPU.md)を参照してください：
+- NVIDIA GPU (CUDA)
+- Apple Silicon (Metal)
+- 自動GPU検出
 
 ### 開発環境でのインストール
 
@@ -62,25 +68,22 @@ source .venv/bin/activate  # macOS/Linux
 python setup_dev.py
 ```
 
-### llama-cpp-pythonのインストール
+### GPUサポートでのインストール
 
-llama-cpp-pythonは`uv sync --extra dev`を実行すると自動的にインストールされます。
-
-手動インストールや異なる計算バックエンドの場合：
-
-**CPU版（デフォルト）**：
-```bash
-uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-```
+デフォルトでは、llama-cpp-pythonはCPUサポートでインストールされます。GPU高速化の場合：
 
 **CUDA版**：
 ```bash
+# CUDA対応のllama-cpp-pythonを再インストール
+uv pip uninstall llama-cpp-python
 uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
 ```
 
 **Metal版（macOS）**：
 ```bash
-CMAKE_ARGS="-DLLAMA_METAL=on" uv pip install llama-cpp-python
+# Metalサポートで再ビルド
+uv pip uninstall llama-cpp-python
+CMAKE_ARGS="-DLLAMA_METAL=on" uv pip install llama-cpp-python --no-cache-dir
 ```
 
 ## モデルのセットアップ
@@ -185,7 +188,7 @@ python -m debugpy --listen 5678 --wait-for-client -m thonny
 
 - Python 3.8以上
 - Thonny 4.0以上
-- llama-cpp-python
+- llama-cpp-python（自動的にインストールされます）
 - 4GB以上のRAM（モデルサイズによる）
 - 5-10GBのディスク容量（モデル用）
 - uv（開発用）

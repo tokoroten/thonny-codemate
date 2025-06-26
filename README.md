@@ -20,10 +20,16 @@ A Thonny IDE plugin that integrates local LLM capabilities using llama-cpp-pytho
 
 ## Installation
 
-### From PyPI (Coming Soon)
+### From PyPI
 ```bash
-pip install thonny-ollama
+# Standard installation (includes llama-cpp-python for CPU)
+pip install thonny-local-ollama
 ```
+
+**For GPU support**, see [INSTALL_GPU.md](INSTALL_GPU.md) for detailed instructions:
+- NVIDIA GPUs (CUDA)
+- Apple Silicon (Metal)
+- Automatic GPU detection
 
 ### Development Installation
 
@@ -62,25 +68,22 @@ source .venv/bin/activate  # macOS/Linux
 python setup_dev.py
 ```
 
-### Installing llama-cpp-python
+### Installing with GPU Support
 
-llama-cpp-python is automatically installed when you run `uv sync --extra dev`.
-
-For manual installation or different compute backends:
-
-**CPU support (default)**:
-```bash
-uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-```
+By default, llama-cpp-python is installed with CPU support. For GPU acceleration:
 
 **CUDA support**:
 ```bash
+# Reinstall llama-cpp-python with CUDA support
+uv pip uninstall llama-cpp-python
 uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
 ```
 
 **Metal support (macOS)**:
 ```bash
-CMAKE_ARGS="-DLLAMA_METAL=on" uv pip install llama-cpp-python
+# Rebuild with Metal support
+uv pip uninstall llama-cpp-python
+CMAKE_ARGS="-DLLAMA_METAL=on" uv pip install llama-cpp-python --no-cache-dir
 ```
 
 ## Model Setup
@@ -191,7 +194,7 @@ The plugin stores its configuration in Thonny's settings system. You can configu
 
 - Python 3.8+
 - Thonny 4.0+
-- llama-cpp-python
+- llama-cpp-python (automatically installed)
 - 4GB+ RAM (depending on model size)
 - 5-10GB disk space for models
 - uv (for development)
