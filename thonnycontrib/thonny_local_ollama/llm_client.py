@@ -427,7 +427,9 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
             "repeat_penalty": config.repeat_penalty,
             "stop": ["</s>", "\n\n\n"],
         }
-        params.update(kwargs)
+        # messagesパラメータは除外（ローカルモデルでは使用しない）
+        kwargs_without_messages = {k: v for k, v in kwargs.items() if k != "messages"}
+        params.update(kwargs_without_messages)
         
         # フルプロンプトを作成
         full_prompt = self._format_prompt(prompt)
@@ -452,10 +454,19 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
             # システムプロンプトを構築
             system_content = self._build_system_prompt()
             
-            messages = [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": prompt}
-            ]
+            # 会話履歴を含むメッセージリストを構築
+            messages = [{"role": "system", "content": system_content}]
+            
+            # 既存の会話履歴があれば追加
+            if "messages" in kwargs:
+                for msg in kwargs["messages"]:
+                    # システムメッセージは除外（既に追加済み）
+                    if msg.get("role") != "system":
+                        messages.append(msg)
+            
+            # 現在のユーザーメッセージを追加
+            messages.append({"role": "user", "content": prompt})
+            
             for token in self._external_provider.generate_stream(
                 prompt=prompt,
                 messages=messages,
@@ -482,10 +493,36 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
             "stop": ["</s>", "\n\n\n"],
             "stream": True,
         }
-        params.update(kwargs)
+        # messagesパラメータは除外（ローカルモデルでは使用しない）
+        kwargs_without_messages = {k: v for k, v in kwargs.items() if k != "messages"}
+        params.update(kwargs_without_messages)
         
         # フルプロンプトを作成
-        full_prompt = self._format_prompt(prompt)
+        # 会話履歴がある場合は、それを含めたプロンプトを作成
+        if "messages" in kwargs:
+            # 会話履歴を含むプロンプトを構築
+            conversation_parts = []
+            
+            # システムプロンプト
+            conversation_parts.append(self._build_system_prompt())
+            
+            # 既存の会話履歴
+            for msg in kwargs["messages"]:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if role == "user":
+                    conversation_parts.append(f"\nUser: {content}")
+                elif role == "assistant":
+                    conversation_parts.append(f"\nAssistant: {content}")
+            
+            # 現在のメッセージ
+            conversation_parts.append(f"\nUser: {prompt}")
+            conversation_parts.append("\nAssistant: ")
+            
+            full_prompt = "\n".join(conversation_parts)
+        else:
+            # 従来の単一プロンプト形式
+            full_prompt = self._format_prompt(prompt)
         
         # ストリーミング生成
         for output in self._model(full_prompt, **params):

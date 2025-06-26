@@ -30,7 +30,8 @@ requires-python = ">=3.8"
 dependencies = [
     "thonny>=4.0.0",
     "huggingface-hub[hf_xet]>=0.16.0",
-    "tkinterweb>=3.24",
+    "tkinterweb[javascript]>=3.24",
+    "pythonmonkey>=0.2.0",
     "markdown>=3.5",
     "pygments>=2.17",
 ]

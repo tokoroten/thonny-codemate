@@ -9,10 +9,13 @@ A Thonny IDE plugin that integrates local LLM capabilities using llama-cpp-pytho
 - 📝 **Code Generation**: Generate code based on natural language instructions
 - 💡 **Code Explanation**: Select code and get AI-powered explanations via context menu
 - 🎯 **Context-Aware**: Understands multiple files and project context
+- 💬 **Conversation Memory**: Maintains conversation history for contextual responses
 - 🎚️ **Skill Level Adaptation**: Adjusts responses based on user's programming skill level
 - 🔌 **External API Support**: Optional support for ChatGPT, Ollama server, and OpenRouter as alternatives
 - 📥 **Model Download Manager**: Built-in download manager for recommended models
 - 🎨 **Customizable System Prompts**: Tailor AI behavior with custom system prompts
+- 📋 **Interactive Code Blocks**: Copy and insert code blocks directly from chat
+- 🎨 **Markdown Rendering**: Optional rich text formatting with tkinterweb
 - 💾 **USB Portable**: Can be bundled with Thonny and models for portable use
 
 ## Installation
@@ -41,6 +44,12 @@ uv sync --all-extras
 
 # Or install with development dependencies only
 uv sync --extra dev
+
+# (Optional) Install Markdown rendering support
+# Basic Markdown rendering:
+uv sync --extra markdown
+# Full JavaScript support for interactive features:
+uv sync --extra markdown-full
 
 # Activate virtual environment
 .venv\Scripts\activate  # Windows
@@ -177,6 +186,10 @@ The plugin stores its configuration in Thonny's settings system. You can configu
 - 4GB+ RAM (depending on model size)
 - 5-10GB disk space for models
 - uv (for development)
+- tkinterweb with JavaScript support (for Markdown rendering and interactive features)
+  - Automatically installed with the plugin
+  - Includes PythonMonkey for JavaScript-Python communication
+  - Enables Copy/Insert buttons with direct Python integration
 
 ## Contributing
 

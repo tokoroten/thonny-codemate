@@ -9,10 +9,13 @@ Thonny IDEにローカルLLM機能を統合するプラグインです。llama-c
 - 📝 **コード生成**: 自然言語の指示に基づいてコードを生成
 - 💡 **コード解説**: コードを選択してコンテキストメニューからAIによる解説を取得
 - 🎯 **コンテキスト認識**: 複数のファイルとプロジェクトのコンテキストを理解
+- 💬 **会話履歴の保持**: LLMに会話履歴を送信し、文脈を保った対話が可能
 - 🎚️ **スキルレベル適応**: ユーザーのプログラミングスキルレベルに応じて回答を調整
 - 🔌 **外部API対応**: ChatGPT、Ollamaサーバー、OpenRouterをオプションで使用可能
 - 📥 **モデルダウンロードマネージャー**: 推奨モデルの組み込みダウンロードマネージャー
 - 🎨 **カスタマイズ可能なシステムプロンプト**: カスタムシステムプロンプトでAIの動作を調整
+- 📋 **インタラクティブなコードブロック**: ネイティブUIでコードのコピーと挿入が可能（JavaScript不要）
+- 🎨 **Markdownレンダリング**: tkinterwebによるオプションのリッチテキスト表示
 - 💾 **USBポータブル**: Thonnyとモデルをバンドルしてポータブル使用が可能
 
 ## インストール
@@ -41,6 +44,12 @@ uv sync --all-extras
 
 # または開発用依存関係のみインストール
 uv sync --extra dev
+
+# （オプション）Markdownレンダリングサポートをインストール
+# 基本的なMarkdownレンダリング：
+uv sync --extra markdown
+# インタラクティブ機能のための完全なJavaScriptサポート：
+uv sync --extra markdown-full
 
 # 仮想環境をアクティベート
 .venv\Scripts\activate  # Windows
@@ -170,6 +179,11 @@ python -m debugpy --listen 5678 --wait-for-client -m thonny
 - llama-cpp-python
 - 4GB以上のRAM（モデルサイズによる）
 - 5-10GBのディスク容量（モデル用）
+- uv（開発用）
+- tkinterweb（JavaScriptサポート付き、Markdownレンダリングとインタラクティブ機能用）
+  - プラグインと一緒に自動的にインストールされます
+  - JavaScript-Python通信のためのPythonMonkeyを含みます
+  - Copy/InsertボタンがPythonと直接統合されます
 
 ## 貢献
 

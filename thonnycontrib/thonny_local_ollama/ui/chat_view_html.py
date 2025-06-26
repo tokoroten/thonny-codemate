@@ -524,6 +524,28 @@ class LLMChatViewHTML(ttk.Frame):
         )
         thread.start()
     
+    def _prepare_conversation_history(self) -> list:
+        """会話履歴をLLM用の形式に変換"""
+        history = []
+        
+        # 最新の会話履歴から適切な数だけ取得（メモリ制限のため）
+        # システムメッセージは除外し、ユーザーとアシスタントの会話のみ
+        workbench = get_workbench()
+        max_history = workbench.get_option("llm.max_conversation_history", 10)  # デフォルト10ターン
+        
+        for sender, text in self.messages[-max_history:]:
+            if sender == "user":
+                # コンテキスト情報を除去（[Context: ...]の部分）
+                clean_text = text
+                if "\n\n[Context:" in text:
+                    clean_text = text.split("\n\n[Context:")[0]
+                history.append({"role": "user", "content": clean_text})
+            elif sender == "assistant":
+                history.append({"role": "assistant", "content": text})
+            # システムメッセージは除外
+        
+        return history
+    
     def _generate_response(self, message: str):
         """バックグラウンドで応答を生成"""
         try:
@@ -586,19 +608,37 @@ Full file content:
 
 Based on this context, {message}"""
                     
-                    for token in self.llm_client.generate_stream(full_prompt):
+                    # 会話履歴を準備
+                    conversation_history = self._prepare_conversation_history()
+                    
+                    for token in self.llm_client.generate_stream(
+                        full_prompt,
+                        messages=conversation_history
+                    ):
                         if self._stop_generation:
                             self.message_queue.put(("complete", None))
                             return
                         self.message_queue.put(("token", token))
                 else:
-                    for token in self.llm_client.generate_stream(message):
+                    # 会話履歴を準備
+                    conversation_history = self._prepare_conversation_history()
+                    
+                    for token in self.llm_client.generate_stream(
+                        message,
+                        messages=conversation_history
+                    ):
                         if self._stop_generation:
                             self.message_queue.put(("complete", None))
                             return
                         self.message_queue.put(("token", token))
             else:
-                for token in self.llm_client.generate_stream(message):
+                # 会話履歴を準備
+                conversation_history = self._prepare_conversation_history()
+                
+                for token in self.llm_client.generate_stream(
+                    message,
+                    messages=conversation_history
+                ):
                     if self._stop_generation:
                         self.message_queue.put(("complete", None))
                         return
