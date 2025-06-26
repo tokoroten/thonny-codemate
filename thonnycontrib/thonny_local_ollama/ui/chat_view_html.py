@@ -143,15 +143,15 @@ class LLMChatViewHTML(ttk.Frame):
         self.status_label = ttk.Label(status_frame, text=tr("No model loaded"), foreground="gray")
         self.status_label.pack(side=tk.RIGHT)
         
-        # HTMLフレーム
-        self.html_frame = HtmlFrame(self, messages_enabled=False)
+        # HTMLフレーム（JavaScriptを有効化）
+        self.html_frame = HtmlFrame(self, messages_enabled=False, javascript_enabled=True)
         self.html_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-        
-        # JavaScriptインターフェースを設定
-        self._setup_js_interface()
         
         # URL変更のハンドラーを設定（Insert機能用）
         self.html_frame.on_url_change = self._handle_url_change
+        
+        # JavaScriptインターフェースを設定（HTML読み込み前に登録）
+        self._setup_js_interface()
         
         # 初期HTMLを設定
         self._update_html()
@@ -220,46 +220,147 @@ class LLMChatViewHTML(ttk.Frame):
         # Escapeキーで生成を停止
         self.bind_all("<Escape>", lambda e: self._stop_if_processing())
     
+    def _show_notification(self, message, notification_type="success"):
+        """一時的な通知を表示"""
+        # ステータスラベルに一時的に表示
+        original_text = self.status_label.cget("text")
+        original_color = self.status_label.cget("foreground")
+        
+        # タイプに応じて色を設定
+        color = "green" if notification_type == "success" else "red"
+        self.status_label.config(text=message, foreground=color)
+        
+        # 2秒後に元に戻す
+        self.after(2000, lambda: self.status_label.config(text=original_text, foreground=original_color))
+    
     def _setup_js_interface(self):
         """JavaScriptとのインターフェースを設定"""
-        # 現時点では、tkinterwebのJS連携機能が限定的なため、
-        # コードの挿入機能は一時的に無効化します。
-        # 将来的にはtkinterwebのアップデートに合わせて実装予定。
-        pass
+        try:
+            # Python関数をJavaScriptから呼び出せるように登録
+            self.html_frame.register_JS_object("pyInsertCode", self._insert_code)
+            self.html_frame.register_JS_object("pyCopyCode", self._copy_code)
+            logger.info("JavaScript API registered successfully")
+        except Exception as e:
+            logger.error(f"Failed to setup JavaScript interface: {e}")
     
-    def _handle_url_change(self, url):
-        """URL変更を処理（Insert機能用）"""
-        if url.startswith("thonny:insert:"):
-            # コードを抽出
-            encoded_code = url[14:]  # "thonny:insert:"の長さ
-            import urllib.parse
-            code = urllib.parse.unquote(encoded_code)
-            
-            # エディタに挿入
+    def _insert_code(self, code):
+        """JavaScriptから呼ばれるコード挿入関数"""
+        try:
             workbench = get_workbench()
             editor = workbench.get_editor_notebook().get_current_editor()
             if editor:
                 text_widget = editor.get_text_widget()
                 text_widget.insert("insert", code)
-                # フォーカスをエディタに戻す
                 text_widget.focus_set()
+                self._show_notification("Code inserted into editor!")
+                return True
+            else:
+                self._show_notification("Please open a file in the editor first", "error")
+                return False
+        except Exception as e:
+            logger.error(f"Error inserting code: {e}")
+            return False
+    
+    def _copy_code(self, code):
+        """JavaScriptから呼ばれるコードコピー関数"""
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(code)
+            self.update()
+            return True
+        except Exception as e:
+            logger.error(f"Error copying code: {e}")
+            return False
+    
+    def _handle_url_change(self, url):
+        """URL変更を処理（Insert機能用）"""
+        if url.startswith("thonny:insert:"):
+            import urllib.parse
+            code = urllib.parse.unquote(url[14:])
+            
+            workbench = get_workbench()
+            editor = workbench.get_editor_notebook().get_current_editor()
+            if editor:
+                text_widget = editor.get_text_widget()
+                text_widget.insert("insert", code)
+                text_widget.focus_set()
+                self._show_notification("Code inserted into editor!")
             else:
                 messagebox.showinfo("No Editor", "Please open a file in the editor first.")
             
-            # URLを元に戻す（無限ループを防ぐ）
-            return False  # ナビゲーションをキャンセル
+            # URLをリセットするため、空のページに戻す
+            # HTMLの再読み込みは避ける（ボタンが使えなくなるため）
+            try:
+                self.html_frame.stop()  # 現在のナビゲーションを停止
+            except:
+                pass
+        
+        return True  # すべてのナビゲーションをキャンセル
     
-    def _update_html(self):
+    def _update_html(self, full_reload=True):
         """HTMLコンテンツを更新"""
-        # 前回のHTMLと比較して変更がある場合のみ更新
-        html_content = self.markdown_renderer.get_full_html(self.messages)
-        
-        # HTMLを設定
-        self.html_frame.load_html(html_content)
-        
-        # スクロールを最下部に（少し遅延を入れて確実に）
-        self.after(100, self._scroll_to_bottom)
-        self.after(300, self._scroll_to_bottom)  # 念のため2回目
+        if full_reload:
+            # 完全な再読み込み（初回やクリア時）
+            html_content = self.markdown_renderer.get_full_html(self.messages)
+            self.html_frame.load_html(html_content)
+            
+            # スクロールを最下部に（少し遅延を入れて確実に）
+            self.after(100, self._scroll_to_bottom)
+            self.after(300, self._scroll_to_bottom)  # 念のため2回目
+        else:
+            # ストリーミング中は最後のメッセージのみ更新（再読み込みしない）
+            if self.messages and self.messages[-1][0] == "assistant":
+                # 最後のメッセージのHTMLを生成
+                last_message_html = self.markdown_renderer.render(
+                    self.messages[-1][1], 
+                    self.messages[-1][0]
+                )
+                # JavaScriptで最後のメッセージのみ更新
+                self._update_last_message_js(last_message_html)
+            self._scroll_to_bottom()
+    
+    def _update_last_message_js(self, message_html):
+        """JavaScriptで最後のメッセージのみ更新"""
+        try:
+            # HTMLをJavaScript文字列としてエスケープ
+            escaped_html = (message_html
+                .replace('\\', '\\\\')
+                .replace('\n', '\\n')
+                .replace('\r', '\\r')
+                .replace('"', '\\"')
+                .replace('</script>', '<\\/script>'))
+            
+            js_code = f"""
+            (function() {{
+                var messagesDiv = document.getElementById('messages');
+                if (!messagesDiv) return;
+                
+                var lastMessage = messagesDiv.lastElementChild;
+                if (lastMessage && lastMessage.classList.contains('message-assistant')) {{
+                    // 既存のアシスタントメッセージを更新
+                    var tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = "{escaped_html}";
+                    var newMessage = tempDiv.firstElementChild;
+                    if (newMessage) {{
+                        messagesDiv.replaceChild(newMessage, lastMessage);
+                    }}
+                }} else {{
+                    // 新しいアシスタントメッセージを追加
+                    messagesDiv.insertAdjacentHTML('beforeend', "{escaped_html}");
+                }}
+                
+                // JavaScriptインターフェースを再登録（新しいボタン用）
+                if (typeof pyInsertCode !== 'undefined' && typeof pyCopyCode !== 'undefined') {{
+                    console.log('JavaScript API is available for new buttons');
+                }}
+            }})();
+            """
+            self.html_frame.run_javascript(js_code)
+            
+        except Exception as e:
+            logger.error(f"Could not update last message: {e}")
+            # エラーの場合はフォールバックとして完全更新
+            self._update_html(full_reload=True)
     
     def _scroll_to_bottom(self):
         """HTMLフレームを最下部にスクロール"""
@@ -564,13 +665,11 @@ Based on this context, {message}"""
             else:
                 self.messages.append(("assistant", self._current_message))
             
-            # レート制限付きで更新（100ms間隔）
+            # レート制限付きで更新（100ms間隔で部分更新）
             current_time = time.time() * 1000  # ミリ秒
             if not self._update_pending and (current_time - self._last_update_time) > 100:
-                self._update_html()
+                self._update_html(full_reload=False)  # ストリーミング中は部分更新のみ
                 self._last_update_time = current_time
-                # ストリーミング中も頻繁にスクロール
-                self.after(10, self._scroll_to_bottom)
             else:
                 # 更新を予約
                 if not self._update_pending:
@@ -583,7 +682,7 @@ Based on this context, {message}"""
     def _delayed_update(self):
         """遅延更新を実行"""
         self._update_pending = False
-        self._update_html()
+        self._update_html(full_reload=False)  # 遅延更新も部分更新を使用
         self._last_update_time = time.time() * 1000
     
     def explain_code(self, code: str):

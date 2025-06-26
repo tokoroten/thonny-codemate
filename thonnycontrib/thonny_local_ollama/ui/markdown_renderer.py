@@ -150,6 +150,9 @@ class MarkdownRenderer:
         Returns:
             完全なHTML文書
         """
+        # コードブロックIDをリセット（完全再生成時）
+        self.code_block_id = 0
+        
         # メッセージをレンダリング
         messages_html = []
         for sender, text in messages:
@@ -216,30 +219,35 @@ class MarkdownRenderer:
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 8px 12px;
+            padding: 6px 12px;
             background: #f1f3f5;
             border-bottom: 1px solid #e1e4e8;
+            min-height: 32px;
         }}
         
         .code-language {{
             font-size: 12px;
             color: #586069;
             font-weight: 500;
+            line-height: 20px;
         }}
         
         .code-buttons {{
             display: flex;
             gap: 8px;
+            margin-left: auto;
         }}
         
         .code-button {{
-            padding: 4px 8px;
-            font-size: 12px;
+            padding: 3px 10px;
+            font-size: 11px;
             border: 1px solid #d1d5da;
             background: white;
-            border-radius: 4px;
+            border-radius: 3px;
             cursor: pointer;
-            transition: all 0.2s;
+            color: #333;
+            font-weight: 500;
+            transition: background-color 0.2s;
         }}
         
         .code-button:hover {{
@@ -247,13 +255,10 @@ class MarkdownRenderer:
             border-color: #c2c7cd;
         }}
         
-        .code-button:active {{
-            background: #e1e4e8;
-        }}
-        
         .code-button.copy-button {{
             background-color: #0066cc;
             color: white;
+            border-color: #0066cc;
         }}
         
         .code-button.copy-button:hover {{
@@ -263,6 +268,7 @@ class MarkdownRenderer:
         .code-button.insert-button {{
             background-color: #28a745;
             color: white;
+            border-color: #28a745;
         }}
         
         .code-button.insert-button:hover {{
@@ -341,75 +347,95 @@ class MarkdownRenderer:
         }}
     </style>
     <script>
+        // Python APIの確認
+        console.log('pyInsertCode available:', typeof pyInsertCode !== 'undefined');
+        console.log('pyCopyCode available:', typeof pyCopyCode !== 'undefined');
+        
         // コードをコピー
         function copyCode(blockId) {{
-            // textareaから実際のコードを取得
             var sourceElement = document.getElementById(blockId + '-source');
             if (!sourceElement) {{
-                alert('Code source not found');
+                showNotification('Code source not found', 'error');
                 return;
             }}
             var code = sourceElement.value;
             
-            // クリップボードにコピー（フォールバック付き）
-            if (navigator.clipboard && navigator.clipboard.writeText) {{
+            // Python関数を使用（PythonMonkey経由）
+            if (typeof pyCopyCode !== 'undefined') {{
+                try {{
+                    var result = pyCopyCode(code);
+                    if (result) {{
+                        showCopySuccess();
+                    }} else {{
+                        showNotification('Failed to copy', 'error');
+                    }}
+                }} catch (error) {{
+                    console.error('Copy error:', error);
+                    // フォールバック: Clipboard API
+                    navigator.clipboard.writeText(code).then(function() {{
+                        showCopySuccess();
+                    }}).catch(function(error) {{
+                        showNotification('Failed to copy', 'error');
+                    }});
+                }}
+            }} else {{
+                // フォールバック: Clipboard API
                 navigator.clipboard.writeText(code).then(function() {{
                     showCopySuccess();
-                }}).catch(function() {{
-                    fallbackCopy(code);
+                }}).catch(function(error) {{
+                    showNotification('Failed to copy', 'error');
                 }});
-            }} else {{
-                fallbackCopy(code);
             }}
         }}
         
         // コードを挿入（Thonnyのエディタに）
         function insertCode(blockId) {{
-            // textareaから実際のコードを取得
             var sourceElement = document.getElementById(blockId + '-source');
             if (!sourceElement) {{
-                alert('Code source not found');
+                showNotification('Code source not found', 'error');
                 return;
             }}
             var code = sourceElement.value;
             
-            // tkinterwebからPythonにメッセージを送る
-            // 注：tkinterwebの制限により、この機能は現在動作しない可能性があります
-            try {{
-                // Python側でインターセプトできるカスタムイベントを発火
+            // Python関数を使用（PythonMonkey経由）
+            if (typeof pyInsertCode !== 'undefined') {{
+                try {{
+                    var result = pyInsertCode(code);
+                    if (!result) {{
+                        showNotification('Please open a file in the editor first', 'error');
+                    }}
+                    // 成功時はナビゲーションを防ぐため何もしない
+                    return false;
+                }} catch (error) {{
+                    console.error('Insert error:', error);
+                    // フォールバック: URL経由
+                    window.location.href = 'thonny:insert:' + encodeURIComponent(code);
+                }}
+            }} else {{
+                // フォールバック: URL経由でPythonに送信
                 window.location.href = 'thonny:insert:' + encodeURIComponent(code);
-            }} catch (e) {{
-                // フォールバック：コピーして手動で貼り付けるよう促す
-                copyCode(blockId);
-                alert('Code copied! Please paste it in the editor (Ctrl+V)');
             }}
         }}
         
-        // フォールバックコピー（古いブラウザ用）
-        function fallbackCopy(text) {{
-            var textArea = document.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed";
-            textArea.style.top = "-9999px";
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            
-            try {{
-                document.execCommand('copy');
-                showCopySuccess();
-            }} catch (err) {{
-                alert('Failed to copy code');
-            }}
-            
-            document.body.removeChild(textArea);
-        }}
         
         // コピー成功通知
         function showCopySuccess() {{
+            showNotification('Code copied!', 'success');
+        }}
+        
+        // 汎用的な通知関数
+        function showNotification(message, type) {{
             var notification = document.createElement('div');
             notification.className = 'copy-success';
-            notification.textContent = 'Code copied!';
+            notification.textContent = message;
+            
+            // タイプに応じて色を変更
+            if (type === 'error') {{
+                notification.style.backgroundColor = '#dc3545';
+            }} else if (type === 'info') {{
+                notification.style.backgroundColor = '#17a2b8';
+            }}
+            
             document.body.appendChild(notification);
             
             setTimeout(function() {{
