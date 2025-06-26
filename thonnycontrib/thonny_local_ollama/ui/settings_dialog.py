@@ -97,7 +97,7 @@ class SettingsDialog(tk.Toplevel):
         
         # コンテキストサイズ
         ttk.Label(main_frame, text="Context Size:").grid(row=2, column=0, sticky="w", pady=5)
-        self.context_size_var = tk.IntVar(value=4096)
+        self.context_size_var = tk.IntVar()
         context_spinbox = ttk.Spinbox(
             main_frame,
             from_=512,
@@ -115,7 +115,7 @@ class SettingsDialog(tk.Toplevel):
         
         # Temperature
         ttk.Label(main_frame, text="Temperature:").grid(row=4, column=0, sticky="w", pady=5)
-        self.temperature_var = tk.DoubleVar(value=0.7)
+        self.temperature_var = tk.DoubleVar()
         temperature_scale = ttk.Scale(
             main_frame,
             from_=0.0,
@@ -125,7 +125,7 @@ class SettingsDialog(tk.Toplevel):
         )
         temperature_scale.grid(row=4, column=1, sticky="ew", pady=5)
         
-        self.temperature_label = ttk.Label(main_frame, text="0.7")
+        self.temperature_label = ttk.Label(main_frame, text="")
         self.temperature_label.grid(row=4, column=2, pady=5)
         
         # Temperature値の更新
@@ -135,7 +135,7 @@ class SettingsDialog(tk.Toplevel):
         
         # Max Tokens
         ttk.Label(main_frame, text="Max Tokens:").grid(row=5, column=0, sticky="w", pady=5)
-        self.max_tokens_var = tk.IntVar(value=2048)
+        self.max_tokens_var = tk.IntVar()
         tokens_spinbox = ttk.Spinbox(
             main_frame,
             from_=128,
@@ -148,7 +148,7 @@ class SettingsDialog(tk.Toplevel):
         
         # Repeat Penalty
         ttk.Label(main_frame, text="Repeat Penalty:").grid(row=6, column=0, sticky="w", pady=5)
-        self.repeat_penalty_var = tk.DoubleVar(value=1.1)
+        self.repeat_penalty_var = tk.DoubleVar()
         repeat_penalty_scale = ttk.Scale(
             main_frame,
             from_=1.0,
@@ -158,7 +158,7 @@ class SettingsDialog(tk.Toplevel):
         )
         repeat_penalty_scale.grid(row=6, column=1, sticky="ew", pady=5)
         
-        self.repeat_penalty_label = ttk.Label(main_frame, text="1.1")
+        self.repeat_penalty_label = ttk.Label(main_frame, text="")
         self.repeat_penalty_label.grid(row=6, column=2, pady=5)
         
         # Repeat Penalty値の更新
@@ -192,18 +192,8 @@ class SettingsDialog(tk.Toplevel):
         )
         skill_combo.grid(row=9, column=1, sticky="w", pady=5)
         
-        # Markdownレンダリング
-        ttk.Label(main_frame, text="Use Markdown View:").grid(row=10, column=0, sticky="w", pady=5)
-        self.use_html_view_var = tk.BooleanVar(value=True)
-        html_check = ttk.Checkbutton(
-            main_frame,
-            text="Enable Markdown rendering (requires tkinterweb)",
-            variable=self.use_html_view_var
-        )
-        html_check.grid(row=10, column=1, sticky="w", pady=5)
-        
         # 出力言語
-        ttk.Label(main_frame, text="Output Language:").grid(row=11, column=0, sticky="w", pady=5)
+        ttk.Label(main_frame, text="Output Language:").grid(row=10, column=0, sticky="w", pady=5)
         self.output_language_var = tk.StringVar(value="auto")
         
         # 言語オプション
@@ -217,7 +207,7 @@ class SettingsDialog(tk.Toplevel):
         ]
         
         language_frame = ttk.Frame(main_frame)
-        language_frame.grid(row=11, column=1, columnspan=2, sticky="w", pady=5)
+        language_frame.grid(row=10, column=1, columnspan=2, sticky="w", pady=5)
         
         self.language_combo = ttk.Combobox(
             language_frame,
@@ -375,12 +365,15 @@ class SettingsDialog(tk.Toplevel):
         """設定を読み込む"""
         self.model_path_var.set(self.workbench.get_option("llm.model_path", ""))
         self.context_size_var.set(self.workbench.get_option("llm.context_size", 4096))
-        self.temperature_var.set(self.workbench.get_option("llm.temperature", 0.7))
+        self.temperature_var.set(self.workbench.get_option("llm.temperature", 0.3))
         self.max_tokens_var.set(self.workbench.get_option("llm.max_tokens", 2048))
         self.repeat_penalty_var.set(self.workbench.get_option("llm.repeat_penalty", 1.1))
         self.skill_level_var.set(self.workbench.get_option("llm.skill_level", "beginner"))
         self.prompt_type_var.set(self.workbench.get_option("llm.prompt_type", "default"))
-        self.use_html_view_var.set(self.workbench.get_option("llm.use_html_view", True))
+        
+        # ラベルを更新
+        self.temperature_label.config(text=f"{self.temperature_var.get():.1f}")
+        self.repeat_penalty_label.config(text=f"{self.repeat_penalty_var.get():.2f}")
         
         # 言語設定を読み込む（デフォルトはThonnyの言語設定に従う）
         default_language = "auto"
@@ -429,11 +422,6 @@ class SettingsDialog(tk.Toplevel):
                 messagebox.showerror("Error", f"API key is required for {provider}!")
                 return
         
-        # HTMLビュー設定の変更をチェック（保存前に）
-        old_use_html = self.workbench.get_option("llm.use_html_view", True)
-        new_use_html = self.use_html_view_var.get()
-        html_view_changed = old_use_html != new_use_html
-        
         # 保存
         self.workbench.set_option("llm.provider", provider)
         self.workbench.set_option("llm.model_path", self.model_path_var.get())
@@ -443,7 +431,6 @@ class SettingsDialog(tk.Toplevel):
         self.workbench.set_option("llm.repeat_penalty", self.repeat_penalty_var.get())
         self.workbench.set_option("llm.skill_level", self.skill_level_var.get())
         self.workbench.set_option("llm.prompt_type", self.prompt_type_var.get())
-        self.workbench.set_option("llm.use_html_view", self.use_html_view_var.get())
         
         # 言語設定を保存
         output_language = self.output_language_var.get()
@@ -460,17 +447,7 @@ class SettingsDialog(tk.Toplevel):
             self.workbench.set_option("llm.custom_prompt", self.custom_prompt)
         
         self.settings_changed = True
-        
-        # HTMLビュー設定が変更された場合は再起動を促す
-        if html_view_changed:
-            messagebox.showinfo(
-                "Restart Required", 
-                "The Markdown view setting change will take effect after restarting the LLM Assistant view.\n\n"
-                "Close and reopen the LLM Assistant from Tools menu."
-            )
-        else:
-            messagebox.showinfo("Success", "Settings saved successfully!")
-        
+        messagebox.showinfo("Success", "Settings saved successfully!")
         self.destroy()
     
     def _test_model(self):
@@ -596,13 +573,6 @@ class SettingsDialog(tk.Toplevel):
         dialog.title("Edit Custom System Prompt")
         dialog.geometry("600x400")
         
-        # 説明ラベル
-        ttk.Label(
-            dialog,
-            text="Enter your custom system prompt for the LLM:",
-            font=("", 10)
-        ).pack(pady=10)
-        
         # テキストエディタ
         text_frame = ttk.Frame(dialog)
         text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -618,17 +588,10 @@ class SettingsDialog(tk.Toplevel):
         if hasattr(self, 'custom_prompt') and self.custom_prompt:
             text_editor.insert("1.0", self.custom_prompt)
         else:
-            # デフォルトのテンプレートを提供
-            text_editor.insert("1.0", """You are a helpful AI assistant integrated into Thonny IDE.
-
-[Customize this prompt to define how the AI should behave]
-
-Example customizations:
-- Focus on specific programming paradigms (functional, OOP, etc.)
-- Emphasize certain coding standards or practices
-- Adapt communication style for your needs
-- Add domain-specific knowledge requirements
-""")
+            # デフォルトプロンプトを初期値として設定
+            from ..llm_client import LLMClient
+            client = LLMClient()
+            text_editor.insert("1.0", client.default_system_prompt)
         
         # ボタンフレーム
         button_frame = ttk.Frame(dialog)

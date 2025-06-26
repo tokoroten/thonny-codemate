@@ -86,12 +86,21 @@ CMAKE_ARGS="-DLLAMA_METAL=on" uv pip install llama-cpp-python
 ## Model Setup
 
 ### Download GGUF Models
+
+Recommended models:
+- **Qwen2.5-Coder-14B** - Latest high-performance model specialized for programming (8.8GB)
+- **Llama-3.2-1B/3B** - Lightweight and fast models (0.8GB/2.0GB)
+- **Llama-3-ELYZA-JP-8B** - Japanese-specialized model (4.9GB)
+
 ```bash
 # Install Hugging Face CLI
 pip install -U "huggingface_hub[cli]"
 
-# Download a model (example)
-huggingface-cli download TheBloke/Llama-3-8B-GGUF llama3-8b.Q4_K_M.gguf --local-dir ./models
+# Qwen2.5 Coder (programming-focused, recommended)
+huggingface-cli download bartowski/Qwen2.5-Coder-14B-Instruct-GGUF Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf --local-dir ./models
+
+# Llama 3.2 1B (lightweight)
+huggingface-cli download bartowski/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-Q4_K_M.gguf --local-dir ./models
 ```
 
 ## Usage

@@ -169,25 +169,26 @@ class MarkdownRenderer:
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
-            padding: 10px;
+            padding: 5px;
             background-color: #f8f8f8;
-            font-size: 14px;
-            line-height: 1.6;
+            font-size: 13px;
+            line-height: 1.4;
         }}
         
         /* メッセージスタイル */
         .message {{
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             background: white;
-            border-radius: 8px;
-            padding: 12px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            padding: 8px 10px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
         }}
         
         .message-header {{
             font-weight: bold;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
             color: #333;
+            font-size: 12px;
         }}
         
         .message-user .message-header {{
@@ -208,9 +209,9 @@ class MarkdownRenderer:
         
         /* コードブロックスタイル */
         .code-block {{
-            margin: 10px 0;
+            margin: 6px 0;
             border: 1px solid #e1e4e8;
-            border-radius: 6px;
+            border-radius: 4px;
             overflow: hidden;
             background: #f6f8fa;
         }}
@@ -219,28 +220,28 @@ class MarkdownRenderer:
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 6px 12px;
+            padding: 4px 10px;
             background: #f1f3f5;
             border-bottom: 1px solid #e1e4e8;
-            min-height: 32px;
+            min-height: 26px;
         }}
         
         .code-language {{
-            font-size: 12px;
+            font-size: 11px;
             color: #586069;
             font-weight: 500;
-            line-height: 20px;
+            line-height: 18px;
         }}
         
         .code-buttons {{
             display: flex;
-            gap: 8px;
+            gap: 6px;
             margin-left: auto;
         }}
         
         .code-button {{
-            padding: 3px 10px;
-            font-size: 11px;
+            padding: 2px 8px;
+            font-size: 10px;
             border: 1px solid #d1d5da;
             background: white;
             border-radius: 3px;
@@ -276,15 +277,15 @@ class MarkdownRenderer:
         }}
         
         .code-content {{
-            padding: 12px;
+            padding: 8px;
             overflow-x: auto;
         }}
         
         .code-content pre {{
             margin: 0;
             font-family: "Consolas", "Monaco", "Courier New", monospace;
-            font-size: 13px;
-            line-height: 1.4;
+            font-size: 12px;
+            line-height: 1.3;
         }}
         
         /* Pygmentsスタイル */
@@ -292,29 +293,29 @@ class MarkdownRenderer:
         
         /* その他のMarkdown要素 */
         p {{
-            margin: 0 0 10px 0;
+            margin: 0 0 6px 0;
         }}
         
         ul, ol {{
-            margin: 0 0 10px 0;
-            padding-left: 20px;
+            margin: 0 0 6px 0;
+            padding-left: 18px;
         }}
         
         blockquote {{
-            margin: 0 0 10px 0;
-            padding: 0 0 0 16px;
-            border-left: 4px solid #dfe2e5;
+            margin: 0 0 6px 0;
+            padding: 0 0 0 12px;
+            border-left: 3px solid #dfe2e5;
             color: #6a737d;
         }}
         
         table {{
             border-collapse: collapse;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }}
         
         th, td {{
             border: 1px solid #dfe2e5;
-            padding: 6px 13px;
+            padding: 4px 8px;
         }}
         
         th {{
@@ -444,9 +445,33 @@ class MarkdownRenderer:
         }}
         
         // 新しいコンテンツが追加された時にスクロール
-        function scrollToBottom() {{
-            window.scrollTo(0, document.body.scrollHeight);
+        function scrollToBottom(smooth) {{
+            // smooth引数が指定されていない場合はtrueをデフォルトに
+            if (smooth === undefined) smooth = true;
+            
+            window.scrollTo({{
+                top: document.body.scrollHeight,
+                behavior: smooth ? 'smooth' : 'auto'
+            }});
         }}
+        
+        // グローバルに公開（Python側から呼び出せるように）
+        window.scrollToBottom = scrollToBottom;
+        
+        // ユーザーがスクロールしているかどうかを追跡
+        var userScrolling = false;
+        var scrollTimeout;
+        
+        window.addEventListener('wheel', function() {{
+            userScrolling = true;
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(function() {{
+                // 最下部付近にいる場合は自動スクロールを再開
+                if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 100) {{
+                    userScrolling = false;
+                }}
+            }}, 1000);
+        }});
         
         // ページ読み込み時にスクロール
         window.onload = function() {{
@@ -456,6 +481,32 @@ class MarkdownRenderer:
         // DOMコンテンツ読み込み時にもスクロール
         document.addEventListener('DOMContentLoaded', function() {{
             setTimeout(scrollToBottom, 50);
+            
+            // MutationObserverで新しいメッセージを監視
+            var messagesContainer = document.getElementById('messages');
+            if (messagesContainer) {{
+                var observer = new MutationObserver(function(mutations) {{
+                    var shouldScroll = false;
+                    mutations.forEach(function(mutation) {{
+                        if (mutation.type === 'childList' || mutation.type === 'characterData') {{
+                            shouldScroll = true;
+                        }}
+                    }});
+                    if (shouldScroll && !userScrolling) {{
+                        // ユーザーがスクロールしていない場合のみ自動スクロール
+                        setTimeout(function() {{
+                            scrollToBottom(false);  // ストリーミング中は即座にスクロール
+                        }}, 50);
+                    }}
+                }});
+                
+                // 監視を開始
+                observer.observe(messagesContainer, {{
+                    childList: true,
+                    subtree: true,
+                    characterData: true
+                }});
+            }}
         }});
     </script>
 </head>

@@ -25,7 +25,7 @@ class ModelConfig:
     model_path: str
     n_ctx: int = 4096  # コンテキストサイズ
     n_gpu_layers: int = 0  # GPU使用レイヤー数（0=CPU only）
-    temperature: float = 0.7
+    temperature: float = 0.3
     max_tokens: int = 2048
     top_p: float = 0.95
     top_k: int = 40
@@ -119,7 +119,7 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
             self._config = ModelConfig(
                 model_path=model_path,
                 n_ctx=workbench.get_option("llm.context_size", 4096),
-                temperature=workbench.get_option("llm.temperature", 0.7),
+                temperature=workbench.get_option("llm.temperature", 0.3),
                 max_tokens=workbench.get_option("llm.max_tokens", 2048),
                 repeat_penalty=workbench.get_option("llm.repeat_penalty", 1.1),
             )

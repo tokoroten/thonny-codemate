@@ -114,9 +114,9 @@ class LLMChatViewHTML(ttk.Frame):
         
         # ヘッダー
         header_frame = ttk.Frame(self)
-        header_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        header_frame.grid(row=0, column=0, sticky="ew", padx=3, pady=2)
         
-        ttk.Label(header_frame, text=tr("LLM Assistant"), font=("", 12, "bold")).pack(side=tk.LEFT)
+        ttk.Label(header_frame, text=tr("LLM Assistant"), font=("", 10, "bold")).pack(side=tk.LEFT)
         
         # Clearボタン
         self.clear_button = ttk.Button(
@@ -125,7 +125,7 @@ class LLMChatViewHTML(ttk.Frame):
             command=self._clear_chat,
             width=8
         )
-        self.clear_button.pack(side=tk.LEFT, padx=10)
+        self.clear_button.pack(side=tk.LEFT, padx=5)
         
         # 設定ボタン
         self.settings_button = ttk.Button(
@@ -138,14 +138,14 @@ class LLMChatViewHTML(ttk.Frame):
         
         # ステータスフレーム
         status_frame = ttk.Frame(header_frame)
-        status_frame.pack(side=tk.RIGHT, padx=5)
+        status_frame.pack(side=tk.RIGHT, padx=3)
         
         self.status_label = ttk.Label(status_frame, text=tr("No model loaded"), foreground="gray")
         self.status_label.pack(side=tk.RIGHT)
         
         # HTMLフレーム（JavaScriptを有効化）
         self.html_frame = HtmlFrame(self, messages_enabled=False, javascript_enabled=True)
-        self.html_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        self.html_frame.grid(row=1, column=0, sticky="nsew", padx=3, pady=2)
         
         # URL変更のハンドラーを設定（Insert機能用）
         self.html_frame.on_url_change = self._handle_url_change
@@ -158,7 +158,7 @@ class LLMChatViewHTML(ttk.Frame):
         
         # 入力エリア
         input_frame = ttk.Frame(self)
-        input_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        input_frame.grid(row=2, column=0, sticky="ew", padx=3, pady=2)
         input_frame.columnconfigure(0, weight=1)
         
         # 入力テキスト
@@ -168,7 +168,7 @@ class LLMChatViewHTML(ttk.Frame):
             font=("Consolas", 10),
             wrap=tk.WORD
         )
-        self.input_text.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        self.input_text.grid(row=0, column=0, sticky="ew", pady=(0, 2))
         
         # ボタンフレーム
         button_frame = ttk.Frame(input_frame)
@@ -190,7 +190,7 @@ class LLMChatViewHTML(ttk.Frame):
             foreground="gray",
             font=("", 9)
         )
-        hint_label.pack(side=tk.RIGHT, padx=5)
+        hint_label.pack(side=tk.RIGHT, padx=3)
         
         # プリセットボタン
         ttk.Button(
@@ -208,7 +208,7 @@ class LLMChatViewHTML(ttk.Frame):
             variable=self.context_var,
             command=self._toggle_context
         )
-        self.context_check.pack(side=tk.LEFT, padx=10)
+        self.context_check.pack(side=tk.LEFT, padx=5)
         
         # コンテキストマネージャー
         self.context_manager = None
@@ -353,6 +353,16 @@ class LLMChatViewHTML(ttk.Frame):
                 if (typeof pyInsertCode !== 'undefined' && typeof pyCopyCode !== 'undefined') {{
                     console.log('JavaScript API is available for new buttons');
                 }}
+                
+                // スクロールを最下部に（ストリーミング中は即座に）
+                if (window.scrollToBottom) {{
+                    window.scrollToBottom(false);  // falseで即座にスクロール
+                }} else {{
+                    window.scrollTo({{
+                        top: document.body.scrollHeight,
+                        behavior: 'auto'
+                    }});
+                }}
             }})();
             """
             self.html_frame.run_javascript(js_code)
@@ -365,9 +375,16 @@ class LLMChatViewHTML(ttk.Frame):
     def _scroll_to_bottom(self):
         """HTMLフレームを最下部にスクロール"""
         try:
-            # JavaScriptを実行してスクロール
+            # JavaScriptを実行してスクロール（スムーズスクロール）
             js_code = """
-            window.scrollTo(0, document.body.scrollHeight);
+            if (window.scrollToBottom) {
+                window.scrollToBottom();
+            } else {
+                window.scrollTo({
+                    top: document.body.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
             """
             self.html_frame.run_javascript(js_code)
             

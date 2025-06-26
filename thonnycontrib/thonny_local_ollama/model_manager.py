@@ -64,13 +64,13 @@ RECOMMENDED_MODELS = {
         "description": "Llama 3 ELYZA JP 8B - 日本語に特化した高性能モデル。",
         "languages": ["ja", "en"]
     },
-    "llama3-13b": {
-        "name": "Meta-Llama-3-13B-Instruct-Q4_K_M.gguf",
-        "repo_id": "QuantFactory/Meta-Llama-3-13B-Instruct-GGUF",
-        "filename": "Meta-Llama-3-13B-Instruct.Q4_K_M.gguf",
-        "size": "7.9GB",
-        "description": "Llama 3 13B - 大規模モデル。高度な推論能力。",
-        "languages": ["en", "multi"]
+    "qwen2.5-coder-14b": {
+        "name": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
+        "repo_id": "bartowski/Qwen2.5-Coder-14B-Instruct-GGUF",
+        "filename": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
+        "size": "8.8GB",
+        "description": "Qwen2.5 Coder 14B - プログラミングに特化した最新の高性能モデル。",
+        "languages": ["en", "zh", "multi", "code"]
     },
 }
 

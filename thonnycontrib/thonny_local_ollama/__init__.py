@@ -89,41 +89,16 @@ def load_plugin():
             # ログ出力でエラーが発生しても続行
             pass
         
-        # UIコンポーネントを登録（エラーハンドリングを追加）
+        # UIコンポーネントを登録（常にHTMLビューを使用）
         try:
-            # 設定に基づいてHTMLまたはテキストビューを選択
-            use_html_view = workbench.get_option("llm.use_html_view", True)
-            
-            if use_html_view:
-                try:
-                    from .ui.chat_view_html import LLMChatViewHTML
-                    workbench.add_view(
-                        LLMChatViewHTML,
-                        "LLM Assistant",
-                        "e",  # 右側に配置（east）
-                        visible_by_default=False,
-                        default_position_key="e"
-                    )
-                except ImportError:
-                    # フォールバック：HTMLビューが使えない場合はテキストビューを使用
-                    logger.info("HTML view not available, falling back to text view")
-                    from .ui.chat_view import LLMChatView
-                    workbench.add_view(
-                        LLMChatView,
-                        "LLM Assistant",
-                        "e",
-                        visible_by_default=False,
-                        default_position_key="e"
-                    )
-            else:
-                from .ui.chat_view import LLMChatView
-                workbench.add_view(
-                    LLMChatView,
-                    "LLM Assistant",
-                    "e",
-                    visible_by_default=False,
-                    default_position_key="e"
-                )
+            from .ui.chat_view_html import LLMChatViewHTML
+            workbench.add_view(
+                LLMChatViewHTML,
+                "LLM Assistant",
+                "e",  # 右側に配置（east）
+                visible_by_default=False,
+                default_position_key="e"
+            )
         except ImportError as e:
             logger.warning(f"Could not import chat view: {e}")
         
@@ -132,7 +107,7 @@ def load_plugin():
             command_id="show_llm_assistant",
             menu_name="tools",
             command_label=tr("Show LLM Assistant"),
-            handler=lambda: workbench.show_view("LLMChatViewHTML" if use_html_view else "LLMChatView"),
+            handler=lambda: workbench.show_view("LLMChatViewHTML"),
             group=150
         )
         
