@@ -158,6 +158,7 @@ class MarkdownRenderer:
         for sender, text in messages:
             messages_html.append(self.render(text, sender))
         
+        
         # 完全なHTML文書を生成
         return f'''
 <!DOCTYPE html>
@@ -449,6 +450,16 @@ class MarkdownRenderer:
     <div id="messages">
         {''.join(messages_html)}
     </div>
+    <script>
+        // ページの準備完了を示すフラグ
+        window.pageReady = false;
+        
+        // ページ読み込み時に最下部にスクロール
+        window.addEventListener('load', function() {{
+            window.scrollTo(0, document.body.scrollHeight);
+            window.pageReady = true;
+        }});
+    </script>
 </body>
 </html>
         '''

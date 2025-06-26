@@ -55,6 +55,9 @@ class LLMChatViewHTML(ttk.Frame):
         self._current_message = ""  # ストリーミング中のメッセージ
         self._stop_generation = False
         
+        # HTMLが完全に読み込まれたかを追跡
+        self._html_ready = False
+        
         self._init_ui()
         self._init_llm()
         
@@ -157,6 +160,10 @@ class LLMChatViewHTML(ttk.Frame):
         # 初期HTMLを設定
         self._update_html(full_reload=True)
         
+        # 初期状態では空のHTMLなのですぐに準備完了とみなす
+        if not self.messages:
+            self._html_ready = True
+        
         # 入力エリア
         input_frame = ttk.Frame(self)
         input_frame.grid(row=2, column=0, sticky="ew", padx=3, pady=2)
@@ -215,7 +222,7 @@ class LLMChatViewHTML(ttk.Frame):
         self.context_manager = None
         
         # キーバインディング
-        self.input_text.bind("<Control-Return>", lambda e: self._handle_send_button())
+        self.input_text.bind("<Control-Return>", lambda e: (self._handle_send_button(), "break")[1])
         self.input_text.bind("<Shift-Return>", lambda e: "break")
         
         # Escapeキーで生成を停止
@@ -302,9 +309,17 @@ class LLMChatViewHTML(ttk.Frame):
         """HTMLコンテンツを更新"""
         if full_reload:
             # 完全な再読み込み（初回やクリア時）
+            self._html_ready = False
             html_content = self.markdown_renderer.get_full_html(self.messages)
+            
+            # HTMLを読み込み（HTML内のJavaScriptで自動的に表示される）
             self.html_frame.load_html(html_content)
             
+            # HTMLの読み込み完了を待つためのチェック
+            self.after(100, self._check_html_ready)
+            
+            # 完全読み込み後にスクロール
+            self._scroll_to_bottom()
         else:
             # ストリーミング中は最後のメッセージのみ更新（再読み込みしない）
             if self.messages and self.messages[-1][0] == "assistant":
@@ -315,6 +330,7 @@ class LLMChatViewHTML(ttk.Frame):
                 )
                 # JavaScriptで最後のメッセージのみ更新
                 self._update_last_message_js(last_message_html)
+                # スクロール位置を維持（部分更新時はスクロールしない）
     
     def _update_last_message_js(self, message_html):
         """JavaScriptで最後のメッセージのみ更新"""
@@ -334,12 +350,20 @@ class LLMChatViewHTML(ttk.Frame):
                 
                 var lastMessage = messagesDiv.lastElementChild;
                 if (lastMessage && lastMessage.classList.contains('message-assistant')) {{
-                    // 既存のアシスタントメッセージを更新
+                    // 内容のみを更新（DOM構造を保持）
                     var tempDiv = document.createElement('div');
                     tempDiv.innerHTML = "{escaped_html}";
                     var newMessage = tempDiv.firstElementChild;
                     if (newMessage) {{
-                        messagesDiv.replaceChild(newMessage, lastMessage);
+                        // メッセージコンテンツ部分のみを更新
+                        var oldContent = lastMessage.querySelector('.message-content');
+                        var newContent = newMessage.querySelector('.message-content');
+                        if (oldContent && newContent) {{
+                            oldContent.innerHTML = newContent.innerHTML;
+                        }} else {{
+                            // フォールバック：全体を置換
+                            messagesDiv.replaceChild(newMessage, lastMessage);
+                        }}
                     }}
                 }} else {{
                     // 新しいアシスタントメッセージを追加
@@ -362,6 +386,11 @@ class LLMChatViewHTML(ttk.Frame):
     def _append_message_js(self, sender: str, text: str):
         """JavaScriptで新しいメッセージを追加"""
         try:
+            # HTMLが準備できていない場合は全体更新
+            if not self._html_ready:
+                self._update_html(full_reload=True)
+                return
+            
             # HTMLを生成
             message_html = self.markdown_renderer.render(text, sender)
             
@@ -378,19 +407,58 @@ class LLMChatViewHTML(ttk.Frame):
                 var messagesDiv = document.getElementById('messages');
                 if (!messagesDiv) {{
                     console.error('Messages container not found');
-                    return;
+                    return false;
                 }}
                 
                 // 新しいメッセージを追加
                 messagesDiv.insertAdjacentHTML('beforeend', "{escaped_html}");
+                return true;
             }})();
             """
-            self.html_frame.run_javascript(js_code)
+            result = self.html_frame.run_javascript(js_code)
+            
+            # JavaScriptの実行に失敗した場合は全体更新
+            if not result:
+                self._update_html(full_reload=True)
             
         except Exception as e:
             logger.error(f"Could not append message: {e}")
             # エラーの場合はフォールバックとして完全更新
             self._update_html(full_reload=True)
+    
+    
+    def _check_html_ready(self):
+        """HTMLの読み込み完了をチェック"""
+        try:
+            # JavaScriptでDOMの準備状態をチェック
+            js_code = """
+            (function() {
+                return document.readyState === 'complete' && 
+                       document.getElementById('messages') !== null &&
+                       typeof pyInsertCode !== 'undefined' &&
+                       typeof pyCopyCode !== 'undefined' &&
+                       window.pageReady === true;
+            })();
+            """
+            result = self.html_frame.run_javascript(js_code)
+            if result:
+                self._html_ready = True
+                logger.debug("HTML is ready")
+            else:
+                # まだ準備ができていない場合は再チェック
+                self.after(50, self._check_html_ready)
+        except Exception as e:
+            logger.debug(f"HTML readiness check error: {e}")
+            # エラーの場合も再チェック
+            self.after(50, self._check_html_ready)
+    
+    def _scroll_to_bottom(self):
+        """HTMLフレームを最下部にスクロール"""
+        try:
+            # tkinterwebの標準的なスクロールメソッドを使用
+            self.html_frame.yview_moveto(1.0)
+        except Exception as e:
+            logger.debug(f"Could not scroll to bottom: {e}")
     
     
     def _init_llm(self):
@@ -474,9 +542,23 @@ class LLMChatViewHTML(ttk.Frame):
         # JavaScriptで新しいメッセージを追加（全体再読み込みを避ける）
         self._append_message_js(sender, text)
         
+        # メッセージ追加後にスクロール
+        self._scroll_to_bottom()
+        
         # ユーザーとアシスタントのメッセージのみ保存（システムメッセージは一時的なものが多いため）
         if sender in ["user", "assistant"]:
             self._save_chat_history()
+    
+    def _add_message_when_ready(self, sender: str, text: str):
+        """HTMLが準備できたらメッセージを追加"""
+        if self._html_ready:
+            # JavaScriptで新しいメッセージを追加
+            self._append_message_js(sender, text)
+            # スクロール
+            self._scroll_to_bottom()
+        else:
+            # まだ準備ができていない場合は再試行
+            self.after(50, lambda: self._add_message_when_ready(sender, text))
     
     def _handle_send_button(self):
         """送信/停止ボタンのハンドラー"""
@@ -731,6 +813,8 @@ Based on this context, {message}"""
             if not self._update_pending and (current_time - self._last_update_time) > 100:
                 self._update_html(full_reload=False)  # ストリーミング中は部分更新のみ
                 self._last_update_time = current_time
+                # ストリーミング中のスクロール
+                self._scroll_to_bottom()
             else:
                 # 更新を予約
                 if not self._update_pending:
@@ -745,6 +829,8 @@ Based on this context, {message}"""
         self._update_pending = False
         self._update_html(full_reload=False)  # 遅延更新も部分更新を使用
         self._last_update_time = time.time() * 1000
+        # 遅延更新時のスクロール
+        self._scroll_to_bottom()
     
     def explain_code(self, code: str):
         """コードを説明（外部から呼ばれる）"""
@@ -884,8 +970,9 @@ Based on this context, {message}"""
                     self.messages.append((msg["sender"], msg["text"]))
                 
                 if self.messages:
+                    # 履歴がある場合は、HTMLの準備後にシステムメッセージを追加
                     self._update_html(full_reload=True)  # 履歴読み込み時は全体更新が必要
-                    self._add_message("system", tr("Previous conversation restored"))
+                    self.after(300, lambda: self._add_message("system", tr("Previous conversation restored")))
                     
         except Exception as e:
             logger.error(f"Failed to load chat history: {e}")
