@@ -115,6 +115,7 @@ class LLMClient:
         
         # 外部プロバイダー
         self._external_provider = None
+        self._current_provider = None  # 現在設定されているプロバイダーを追跡
         
         # デフォルトシステムプロンプト（統合版）
         self.default_system_prompt = """You are an expert programming assistant integrated into Thonny IDE.
@@ -155,17 +156,19 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
     
     def get_config(self) -> ModelConfig:
         """現在の設定を取得"""
-        if self._config is None:
-            # デフォルト設定を作成
-            from thonny import get_workbench
-            workbench = get_workbench()
-            
-            # プロバイダーをチェック
-            provider = workbench.get_option("llm.provider", "local")
-            
+        # 毎回プロバイダーをチェック
+        from thonny import get_workbench
+        workbench = get_workbench()
+        provider = workbench.get_option("llm.provider", "local")
+        
+        # プロバイダーが変更された場合は再設定
+        if provider != self._current_provider:
+            self._current_provider = provider
+            self._external_provider = None  # 古いプロバイダーをクリア
             if provider != "local":
-                # 外部プロバイダーを設定
                 self._setup_external_provider(provider)
+        
+        if self._config is None:
             
             model_path = workbench.get_option("llm.model_path", "")
             if not model_path and provider == "local":

@@ -265,9 +265,18 @@ class SettingsDialog(tk.Toplevel):
         # 外部モデル名
         self.external_model_label = ttk.Label(main_frame, text="Model Name:")
         self.external_model_label.grid(row=17, column=0, sticky="w", pady=5)
-        self.external_model_var = tk.StringVar(value="gpt-3.5-turbo")
+        self.external_model_var = tk.StringVar(value="gpt-4o-mini")
         self.external_model_entry = ttk.Entry(main_frame, textvariable=self.external_model_var)
         self.external_model_entry.grid(row=17, column=1, sticky="ew", pady=5)
+        
+        # ChatGPTモデルコンボボックス（ChatGPT選択時のみ表示）
+        self.external_model_combo = ttk.Combobox(
+            main_frame,
+            textvariable=self.external_model_var,
+            state="readonly",
+            width=30
+        )
+        # 初期状態では非表示
         
         # システムプロンプト設定
         ttk.Label(main_frame, text="System Prompt", font=("", 10, "bold")).grid(
@@ -398,7 +407,7 @@ class SettingsDialog(tk.Toplevel):
         self.provider_var.set(self.workbench.get_option("llm.provider", "local"))
         self.api_key_var.set(self.workbench.get_option("llm.api_key", ""))
         self.base_url_var.set(self.workbench.get_option("llm.base_url", "http://localhost:11434"))
-        self.external_model_var.set(self.workbench.get_option("llm.external_model", "gpt-3.5-turbo"))
+        self.external_model_var.set(self.workbench.get_option("llm.external_model", "gpt-4o-mini"))
         
         # カスタムプロンプトを読み込む
         self.custom_prompt = self.workbench.get_option("llm.custom_prompt", "")
@@ -654,6 +663,9 @@ class SettingsDialog(tk.Toplevel):
         """プロバイダー変更時の処理"""
         provider = self.provider_var.get()
         
+        # コンボボックスを常に非表示
+        self.external_model_combo.grid_remove()
+        
         if provider == "local":
             # ローカルモデルの設定を表示
             self.model_path_entry.config(state=tk.NORMAL)
@@ -673,14 +685,33 @@ class SettingsDialog(tk.Toplevel):
                 self.base_url_label.grid_remove()
                 self.base_url_entry.grid_remove()
                 self.external_model_label.grid()
-                self.external_model_entry.grid()
-                self.external_model_var.set("gpt-3.5-turbo")
+                
+                # ChatGPTの場合はコンボボックスを表示
+                self.external_model_entry.grid_remove()
+                self.external_model_combo.grid(row=17, column=1, sticky="ew", pady=5)
+                
+                # ChatGPTモデルリスト
+                chatgpt_models = [
+                    "gpt-4o",
+                    "gpt-4o-mini", 
+                    "gpt-4-turbo",
+                    "gpt-4",
+                    "o1-preview",
+                    "o1-mini"
+                ]
+                self.external_model_combo['values'] = chatgpt_models
+                
+                # 現在の値がリストにない場合はデフォルトを設定
+                if self.external_model_var.get() not in chatgpt_models:
+                    self.external_model_var.set("gpt-4o-mini")
             elif provider == "ollama":
                 self.api_key_label.grid_remove()
                 self.api_key_entry.grid_remove()
                 self.base_url_label.grid()
                 self.base_url_entry.grid()
                 self.external_model_label.grid()
+                
+                # Ollamaの場合はテキスト入力
                 self.external_model_entry.grid()
                 self.external_model_var.set("llama3")
             elif provider == "openrouter":
@@ -689,8 +720,33 @@ class SettingsDialog(tk.Toplevel):
                 self.base_url_label.grid_remove()
                 self.base_url_entry.grid_remove()
                 self.external_model_label.grid()
-                self.external_model_entry.grid()
-                self.external_model_var.set("meta-llama/llama-3.2-3b-instruct:free")
+                
+                # OpenRouterの場合はコンボボックスを表示
+                self.external_model_entry.grid_remove()
+                self.external_model_combo.grid(row=17, column=1, sticky="ew", pady=5)
+                
+                # OpenRouterモデルリスト（無料モデルを中心に）
+                openrouter_models = [
+                    "meta-llama/llama-3.2-3b-instruct:free",
+                    "meta-llama/llama-3.2-1b-instruct:free",
+                    "meta-llama/llama-3.1-8b-instruct:free",
+                    "google/gemini-2.0-flash-exp:free",
+                    "google/gemini-flash-1.5-8b:free",
+                    "google/gemini-flash-1.5:free",
+                    "microsoft/phi-3-mini-128k-instruct:free",
+                    "microsoft/phi-3-medium-128k-instruct:free",
+                    "mistralai/mistral-7b-instruct:free",
+                    "qwen/qwen-2-7b-instruct:free",
+                    "anthropic/claude-3.5-sonnet",
+                    "anthropic/claude-3.5-haiku",
+                    "openai/gpt-4o",
+                    "openai/gpt-4o-mini"
+                ]
+                self.external_model_combo['values'] = openrouter_models
+                
+                # 現在の値がリストにない場合はデフォルトを設定
+                if self.external_model_var.get() not in openrouter_models:
+                    self.external_model_var.set("meta-llama/llama-3.2-3b-instruct:free")
     
     def _adjust_window_size(self):
         """ウィンドウサイズをコンテンツに合わせて調整"""

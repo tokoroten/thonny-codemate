@@ -214,9 +214,23 @@ def get_llm_client():
     """
     global _llm_client
     
-    if _llm_client is None:
-        from .llm_client import LLMClient
-        _llm_client = LLMClient()
+    # プロバイダーが変更されている可能性があるため、毎回チェック
+    from thonny import get_workbench
+    workbench = get_workbench()
+    current_provider = workbench.get_option("llm.provider", "local")
+    
+    # クライアントが存在し、プロバイダーが一致している場合は再利用
+    if _llm_client is not None:
+        # LLMClient内部で管理されているプロバイダーを確認
+        if _llm_client._current_provider == current_provider:
+            return _llm_client
+        else:
+            # プロバイダーが変更された場合は再作成
+            cleanup_llm_client()
+    
+    # 新しいクライアントを作成
+    from .llm_client import LLMClient
+    _llm_client = LLMClient()
     
     return _llm_client
 

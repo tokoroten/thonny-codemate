@@ -108,8 +108,10 @@ class MarkdownRenderer:
         return f'''
         <div class="code-block" id="{block_id}">
             <div class="code-header">
-                <span class="code-language">{language or 'text'}</span>
-                <div class="code-buttons">
+                <div class="code-language-wrapper">
+                    <span class="code-language">{language or 'text'}</span>
+                </div>
+                <div class="code-buttons-wrapper">
                     <button class="code-button copy-button" onclick="copyCode('{block_id}')">
                         Copy
                     </button>
@@ -218,13 +220,27 @@ class MarkdownRenderer:
         }}
         
         .code-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
             padding: 4px 10px;
             background: #f1f3f5;
             border-bottom: 1px solid #e1e4e8;
             min-height: 26px;
+            overflow: hidden;
+        }}
+        
+        .code-header:after {{
+            content: "";
+            display: table;
+            clear: both;
+        }}
+        
+        .code-language-wrapper {{
+            float: left;
+            line-height: 22px;
+        }}
+        
+        .code-buttons-wrapper {{
+            float: right;
+            line-height: 22px;
         }}
         
         .code-language {{
@@ -234,10 +250,12 @@ class MarkdownRenderer:
             line-height: 18px;
         }}
         
-        .code-buttons {{
-            display: flex;
-            gap: 6px;
-            margin-left: auto;
+        .code-button {{
+            display: inline-block;
+        }}
+        
+        .code-button + .code-button {{
+            margin-left: 6px;
         }}
         
         .code-button {{

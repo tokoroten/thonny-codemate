@@ -652,6 +652,10 @@ class LLMChatViewHTML(ttk.Frame):
     def _generate_response(self, message: str):
         """バックグラウンドで応答を生成"""
         try:
+            # 最新のLLMクライアントを取得（プロバイダー変更に対応）
+            from .. import get_llm_client
+            llm_client = get_llm_client()
+            
             # コンテキストを含める場合
             if self.context_var.get() and self.context_manager:
                 # 現在のエディタ情報を取得
@@ -714,7 +718,7 @@ Based on this context, {message}"""
                     # 会話履歴を準備
                     conversation_history = self._prepare_conversation_history()
                     
-                    for token in self.llm_client.generate_stream(
+                    for token in llm_client.generate_stream(
                         full_prompt,
                         messages=conversation_history
                     ):
@@ -726,7 +730,7 @@ Based on this context, {message}"""
                     # 会話履歴を準備
                     conversation_history = self._prepare_conversation_history()
                     
-                    for token in self.llm_client.generate_stream(
+                    for token in llm_client.generate_stream(
                         message,
                         messages=conversation_history
                     ):
@@ -738,7 +742,7 @@ Based on this context, {message}"""
                 # 会話履歴を準備
                 conversation_history = self._prepare_conversation_history()
                 
-                for token in self.llm_client.generate_stream(
+                for token in llm_client.generate_stream(
                     message,
                     messages=conversation_history
                 ):
@@ -774,7 +778,10 @@ Based on this context, {message}"""
                             self.messages[-1] = ("assistant", self._current_message)
                         else:
                             # アシスタントメッセージがない場合は新規追加
-                            self._add_message("assistant", self._current_message)
+                            self.messages.append(("assistant", self._current_message))
+                        
+                        # 最終更新を即座に実行
+                        self._update_html(full_reload=False)
                         self._current_message = ""
                         
                         # 停止された場合のみ停止メッセージを追加
