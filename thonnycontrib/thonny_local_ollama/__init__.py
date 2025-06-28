@@ -111,26 +111,27 @@ def load_plugin():
             group=150
         )
         
+        # AI機能のグループ（上下にセパレーターで区切る）
         # エディタのコンテキストメニューにコマンドを追加
         workbench.add_command(
             command_id="explain_selection",
             menu_name="edit",
-            command_label=tr("Explain Selected Code"),
+            command_label=tr("AI: Explain Selected Code"),
             handler=explain_selection_handler,
-            default_sequence=None,
-            extra_sequences=[],
-            group=99
+            default_sequence="<Control-Alt-e>",  # Ctrl+Alt+E for Explain
+            extra_sequences=["<Control-Shift-e>"],  # 代替ショートカット
+            group=150  # グループ番号を調整
         )
         
         # コード生成コマンドを追加
         workbench.add_command(
             command_id="generate_from_comment",
             menu_name="edit",
-            command_label=tr("Generate Code from Comment"),
+            command_label=tr("AI: Generate Code from Comment"),
             handler=generate_from_comment_handler,
             default_sequence="<Control-Alt-g>",
             extra_sequences=[],
-            group=99
+            group=150  # 同じグループにしてAI機能をまとめる
         )
         
         # 設定を登録
