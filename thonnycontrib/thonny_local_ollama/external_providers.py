@@ -142,11 +142,39 @@ class OllamaProvider(ExternalProvider):
         self.model = model
         self.headers = {"Content-Type": "application/json"}
     
+    def _build_prompt_from_messages(self, messages: list) -> str:
+        """メッセージリストからOllama用のプロンプトを構築"""
+        prompt_parts = []
+        
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            
+            if role == "system":
+                prompt_parts.append(f"System: {content}")
+            elif role == "user":
+                prompt_parts.append(f"\nUser: {content}")
+            elif role == "assistant":
+                prompt_parts.append(f"\nAssistant: {content}")
+        
+        # 最後にアシスタントの応答を促す
+        prompt_parts.append("\nAssistant: ")
+        
+        return "\n".join(prompt_parts)
+    
     def generate(self, prompt: str, **kwargs) -> str:
         """Ollama APIを使用してテキスト生成"""
+        # messagesパラメータがある場合は会話履歴を含める
+        messages = kwargs.get("messages", [])
+        if messages:
+            # システムメッセージとユーザーメッセージを含む完全なプロンプトを構築
+            full_prompt = self._build_prompt_from_messages(messages)
+        else:
+            full_prompt = prompt
+            
         data = {
             "model": self.model,
-            "prompt": prompt,
+            "prompt": full_prompt,
             "stream": False,
             "options": {
                 "temperature": kwargs.get("temperature", 0.7),
@@ -171,9 +199,17 @@ class OllamaProvider(ExternalProvider):
     
     def generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
         """Ollama APIを使用してストリーミング生成"""
+        # messagesパラメータがある場合は会話履歴を含める
+        messages = kwargs.get("messages", [])
+        if messages:
+            # システムメッセージとユーザーメッセージを含む完全なプロンプトを構築
+            full_prompt = self._build_prompt_from_messages(messages)
+        else:
+            full_prompt = prompt
+            
         data = {
             "model": self.model,
-            "prompt": prompt,
+            "prompt": full_prompt,
             "stream": True,
             "options": {
                 "temperature": kwargs.get("temperature", 0.7),

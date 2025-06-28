@@ -219,6 +219,34 @@ class SettingsDialog(tk.Toplevel):
         )
         self.api_key_entry.pack(side="left")
         
+        # Ollama Server設定 (Basic Settingsに移動)
+        self.ollama_server_frame = ttk.Frame(self.api_frame)
+        ttk.Label(self.ollama_server_frame, text=tr("Server:")).pack(side="left", padx=(0, 10))
+        
+        # IP/Host
+        ttk.Label(self.ollama_server_frame, text=tr("Host:")).pack(side="left", padx=(0, 5))
+        self.ollama_host_var = tk.StringVar(value="localhost")
+        self.ollama_host_entry = ttk.Entry(
+            self.ollama_server_frame,
+            textvariable=self.ollama_host_var,
+            width=15
+        )
+        self.ollama_host_entry.pack(side="left", padx=(0, 10))
+        
+        # Port
+        ttk.Label(self.ollama_server_frame, text=tr("Port:")).pack(side="left", padx=(0, 5))
+        self.ollama_port_var = tk.StringVar(value="11434")
+        self.ollama_port_entry = ttk.Entry(
+            self.ollama_server_frame,
+            textvariable=self.ollama_port_var,
+            width=8
+        )
+        self.ollama_port_entry.pack(side="left")
+        
+        # Host/Port変更時にBase URLを更新
+        self.ollama_host_var.trace_add("write", self._update_base_url_from_host_port)
+        self.ollama_port_var.trace_add("write", self._update_base_url_from_host_port)
+        
         # Model Name（外部API用）
         self.model_name_frame = ttk.Frame(self.api_frame)
         ttk.Label(self.model_name_frame, text=tr("Model Name:")).pack(side="left", padx=(0, 10))
@@ -404,18 +432,8 @@ class SettingsDialog(tk.Toplevel):
         
         adv_frame = self.advanced_section.content_frame
         
-        # Base URL (Ollama用)
-        self.base_url_frame = ttk.Frame(adv_frame)
-        self.base_url_frame.pack(fill="x", pady=5)
-        
-        ttk.Label(self.base_url_frame, text=tr("Base URL:")).pack(side="left", padx=(0, 10))
+        # Base URL (内部用、非表示)
         self.base_url_var = tk.StringVar(value="http://localhost:11434")
-        self.base_url_entry = ttk.Entry(
-            self.base_url_frame,
-            textvariable=self.base_url_var,
-            width=40
-        )
-        self.base_url_entry.pack(side="left")
         
         # Base URLが変更された時にOllamaのモデルを再取得
         self.base_url_var.trace_add("write", self._on_base_url_changed)
@@ -465,8 +483,8 @@ class SettingsDialog(tk.Toplevel):
         self.api_frame.pack_forget()
         self.api_key_frame.pack_forget()
         self.model_name_frame.pack_forget()
-        self.base_url_frame.pack_forget()
         self.refresh_ollama_button.pack_forget()
+        self.ollama_server_frame.pack_forget()
         
         if provider == "local":
             # ローカルモデル
@@ -507,8 +525,9 @@ class SettingsDialog(tk.Toplevel):
                     self.external_model_var.set(models[0])
             
             elif provider == "ollama":
+                # サーバー設定を表示
+                self.ollama_server_frame.pack(fill="x", pady=2)
                 self.model_name_frame.pack(fill="x", pady=2)
-                self.base_url_frame.pack(fill="x", pady=2)
                 
                 # Ollamaの場合もコンボボックスを使用
                 self.external_model_entry.pack_forget()
@@ -519,10 +538,6 @@ class SettingsDialog(tk.Toplevel):
                 
                 # Ollamaからモデルを取得
                 self._fetch_ollama_models()
-                
-                # Base URLをAdvancedセクションに表示
-                if hasattr(self, 'advanced_section'):
-                    self.base_url_frame.pack(fill="x", pady=5)
     
     def _update_language_label(self, event=None):
         """言語ラベルを更新"""
@@ -686,7 +701,33 @@ class SettingsDialog(tk.Toplevel):
         else:
             self.api_key_var.set("")
             
-        self.base_url_var.set(self.workbench.get_option("llm.base_url", "http://localhost:11434"))
+        base_url = self.workbench.get_option("llm.base_url", "http://localhost:11434")
+        self.base_url_var.set(base_url)
+        
+        # Base URLからHost/Portを抽出
+        try:
+            if base_url.startswith("http://"):
+                url_part = base_url[7:]  # "http://"を除去
+            elif base_url.startswith("https://"):
+                url_part = base_url[8:]  # "https://"を除去
+            else:
+                url_part = base_url
+            
+            if ":" in url_part:
+                host, port = url_part.split(":", 1)
+                # ポート番号の後にパスがある場合は除去
+                if "/" in port:
+                    port = port.split("/")[0]
+                self.ollama_host_var.set(host)
+                self.ollama_port_var.set(port)
+            else:
+                self.ollama_host_var.set(url_part)
+                self.ollama_port_var.set("11434")
+        except Exception as e:
+            logger.error(f"Error parsing base URL: {e}")
+            self.ollama_host_var.set("localhost")
+            self.ollama_port_var.set("11434")
+        
         self.external_model_var.set(self.workbench.get_option("llm.external_model", "gpt-4o-mini"))
         self.prompt_type_var.set(self.workbench.get_option("llm.prompt_type", "default"))
         
@@ -773,7 +814,7 @@ class SettingsDialog(tk.Toplevel):
             
         except Exception as e:
             logger.error(f"Error in _fetch_ollama_models: {e}")
-            messagebox.showerror(tr("Error"), f"Failed to fetch models: {str(e)}")
+            messagebox.showerror(tr("Error"), tr("Failed to fetch models: {}").format(str(e)))
             self.refresh_ollama_button.config(state="normal", text=tr("Refresh"))
     
     def _update_ollama_models(self, models: list, current_model: str, error: Optional[str] = None):
@@ -785,7 +826,7 @@ class SettingsDialog(tk.Toplevel):
             if error:
                 # 初期化中でなければエラーを表示
                 if hasattr(self, '_initialization_complete'):
-                    messagebox.showerror(tr("Error"), f"Failed to connect to Ollama: {error}")
+                    messagebox.showerror(tr("Error"), tr("Failed to connect to Ollama: {}").format(error))
                 else:
                     logger.warning(f"Failed to connect to Ollama during initialization: {error}")
                 self.external_model_combo['values'] = []
@@ -813,6 +854,18 @@ class SettingsDialog(tk.Toplevel):
                 
         except Exception as e:
             logger.error(f"Error updating Ollama models: {e}")
+    
+    def _update_base_url_from_host_port(self, *args):
+        """Host/PortからBase URLを更新"""
+        try:
+            host = self.ollama_host_var.get().strip()
+            port = self.ollama_port_var.get().strip()
+            
+            if host and port:
+                # Base URLを構築
+                self.base_url_var.set(f"http://{host}:{port}")
+        except Exception as e:
+            logger.error(f"Error updating base URL: {e}")
     
     def _on_base_url_changed(self, *args):
         """Base URLが変更された時の処理"""
