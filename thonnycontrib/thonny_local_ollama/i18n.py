@@ -100,6 +100,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "LLM Busy": "LLM実行中",
         "Please wait for the current generation to complete.": "現在の生成が完了するまでお待ちください。",
         "Generating...": "生成中...",
+        "Loading...": "読み込み中...",
+        "Testing...": "テスト中...",
+        "No Models": "モデルなし",
+        "No models found in Ollama. Please pull a model first using 'ollama pull <model>'": "Ollamaにモデルが見つかりません。まず 'ollama pull <model>' でモデルをダウンロードしてください。",
         
         # スキルレベル
         "beginner": "初心者",
@@ -216,6 +220,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "LLM Busy": "LLM正在执行",
         "Please wait for the current generation to complete.": "请等待当前生成完成。",
         "Generating...": "正在生成...",
+        "Loading...": "正在加载...",
+        "Testing...": "正在测试...",
+        "No Models": "没有模型",
+        "No models found in Ollama. Please pull a model first using 'ollama pull <model>'": "在Ollama中未找到模型。请先使用 'ollama pull <model>' 下载模型。",
         
         # スキルレベル
         "beginner": "初学者",
@@ -332,6 +340,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "LLM Busy": "LLM正在執行",
         "Please wait for the current generation to complete.": "請等待當前生成完成。",
         "Generating...": "正在生成...",
+        "Loading...": "正在載入...",
+        "Testing...": "正在測試...",
+        "No Models": "沒有模型",
+        "No models found in Ollama. Please pull a model first using 'ollama pull <model>'": "在Ollama中未找到模型。請先使用 'ollama pull <model>' 下載模型。",
         
         # スキルレベル
         "beginner": "初學者",

@@ -201,21 +201,38 @@ class OllamaProvider(ExternalProvider):
             logger.error(f"Ollama streaming failed: {e}")
             raise
     
+    def get_models(self) -> list[str]:
+        """利用可能なモデルのリストを取得"""
+        try:
+            req = urllib.request.Request(f"{self.base_url}/api/tags")
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                models = [m['name'] for m in data.get('models', [])]
+                return models
+        except Exception as e:
+            logger.error(f"Failed to fetch Ollama models: {e}")
+            return []
+    
     def test_connection(self) -> Dict[str, Any]:
         """接続テスト"""
         try:
             # モデルリストを取得してテスト
-            req = urllib.request.Request(f"{self.base_url}/api/tags")
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                models = [m['name'] for m in data.get('models', [])]
-                
+            models = self.get_models()
+            
+            if models:
                 return {
                     "success": True,
                     "provider": "Ollama",
                     "base_url": self.base_url,
                     "available_models": models,
                     "current_model": self.model
+                }
+            else:
+                return {
+                    "success": False,
+                    "provider": "Ollama",
+                    "base_url": self.base_url,
+                    "error": "No models found or connection failed"
                 }
         except Exception as e:
             return {

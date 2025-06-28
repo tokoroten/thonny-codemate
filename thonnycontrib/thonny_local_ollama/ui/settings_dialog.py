@@ -122,13 +122,14 @@ class SettingsDialog(tk.Toplevel):
             style="Large.TButton"
         ).pack(side="left", padx=(0, 8), ipady=5)  # ipadyで高さを増やす
         
-        ttk.Button(
+        self.test_connection_button = ttk.Button(
             left_buttons,
             text=tr("Test Connection"),
             command=self._test_connection,
             width=20,  # 幅を指定
             style="Large.TButton"
-        ).pack(side="left", ipady=5)  # ipadyで高さを増やす
+        )
+        self.test_connection_button.pack(side="left", ipady=5)  # ipadyで高さを増やす
         
         # 右側のボタン
         right_buttons = ttk.Frame(button_frame)
@@ -155,6 +156,9 @@ class SettingsDialog(tk.Toplevel):
         
         # 初期状態を更新
         self._on_provider_changed()
+        
+        # 初期化完了フラグを設定
+        self._initialization_complete = True
     
     def _create_basic_section(self):
         """基本設定セクション"""
@@ -228,11 +232,19 @@ class SettingsDialog(tk.Toplevel):
             width=30
         )
         
-        # Ollama用エントリー
+        # Ollama用エントリー（削除予定、互換性のために残す）
         self.external_model_entry = ttk.Entry(
             self.model_name_frame,
             textvariable=self.external_model_var,
             width=30
+        )
+        
+        # Ollama用リフレッシュボタン
+        self.refresh_ollama_button = ttk.Button(
+            self.model_name_frame,
+            text=tr("Refresh"),
+            command=self._fetch_ollama_models,
+            width=10
         )
         
         # Language
@@ -405,6 +417,9 @@ class SettingsDialog(tk.Toplevel):
         )
         self.base_url_entry.pack(side="left")
         
+        # Base URLが変更された時にOllamaのモデルを再取得
+        self.base_url_var.trace_add("write", self._on_base_url_changed)
+        
         # System Prompt Type
         prompt_frame = ttk.Frame(adv_frame)
         prompt_frame.pack(fill="x", pady=5)
@@ -451,6 +466,7 @@ class SettingsDialog(tk.Toplevel):
         self.api_key_frame.pack_forget()
         self.model_name_frame.pack_forget()
         self.base_url_frame.pack_forget()
+        self.refresh_ollama_button.pack_forget()
         
         if provider == "local":
             # ローカルモデル
@@ -494,9 +510,15 @@ class SettingsDialog(tk.Toplevel):
                 self.model_name_frame.pack(fill="x", pady=2)
                 self.base_url_frame.pack(fill="x", pady=2)
                 
-                # エントリーを表示（Advanced Settingsに移動）
-                self.external_model_combo.pack_forget()
-                self.external_model_entry.pack(side="left")
+                # Ollamaの場合もコンボボックスを使用
+                self.external_model_entry.pack_forget()
+                self.external_model_combo.pack(side="left")
+                
+                # リフレッシュボタンを表示
+                self.refresh_ollama_button.pack(side="left", padx=(5, 0))
+                
+                # Ollamaからモデルを取得
+                self._fetch_ollama_models()
                 
                 # Base URLをAdvancedセクションに表示
                 if hasattr(self, 'advanced_section'):
@@ -565,9 +587,69 @@ class SettingsDialog(tk.Toplevel):
             # 外部APIのテスト
             if provider in ["chatgpt", "openrouter"] and not self.api_key_var.get():
                 messagebox.showerror(tr("Error"), tr("API key is required for {}").format(provider))
+                return
+            
+            # 実際のAPI接続テストを実装
+            self.test_connection_button.config(state="disabled", text=tr("Testing..."))
+            
+            def test_api():
+                try:
+                    if provider == "ollama":
+                        from ..external_providers import OllamaProvider
+                        api_provider = OllamaProvider(
+                            base_url=self.base_url_var.get(),
+                            model=self.external_model_var.get()
+                        )
+                    elif provider == "chatgpt":
+                        from ..external_providers import ChatGPTProvider
+                        api_provider = ChatGPTProvider(
+                            api_key=self.api_key_var.get(),
+                            model=self.external_model_var.get()
+                        )
+                    elif provider == "openrouter":
+                        from ..external_providers import OpenRouterProvider
+                        api_provider = OpenRouterProvider(
+                            api_key=self.api_key_var.get(),
+                            model=self.external_model_var.get()
+                        )
+                    
+                    result = api_provider.test_connection()
+                    self.after(0, lambda: self._show_test_result(result))
+                    
+                except Exception as e:
+                    logger.error(f"Test connection error: {e}")
+                    self.after(0, lambda: self._show_test_result({
+                        "success": False,
+                        "provider": provider,
+                        "error": str(e)
+                    }))
+            
+            import threading
+            thread = threading.Thread(target=test_api, daemon=True)
+            thread.start()
+    
+    def _show_test_result(self, result: dict):
+        """接続テスト結果を表示"""
+        self.test_connection_button.config(state="normal", text=tr("Test Connection"))
+        
+        if result["success"]:
+            if result["provider"] == "Ollama":
+                models = result.get("available_models", [])
+                model_info = f"\nModels: {len(models)}" if models else "\nNo models found"
+                messagebox.showinfo(
+                    tr("Success"), 
+                    f"Connected to {result['provider']} successfully!{model_info}"
+                )
             else:
-                # 実際のAPI接続テストを実装
-                messagebox.showinfo(tr("Test"), tr("Testing {} connection...").format(provider))
+                messagebox.showinfo(
+                    tr("Success"), 
+                    f"Connected to {result['provider']} successfully!"
+                )
+        else:
+            messagebox.showerror(
+                tr("Error"), 
+                f"Failed to connect to {result['provider']}: {result.get('error', 'Unknown error')}"
+            )
     
     def _edit_custom_prompt(self):
         """カスタムプロンプトを編集"""
@@ -659,6 +741,88 @@ class SettingsDialog(tk.Toplevel):
         
         self.settings_changed = True
         self.destroy()
+    
+    def _fetch_ollama_models(self):
+        """Ollamaからモデルリストを取得"""
+        try:
+            # 現在の設定を一時的に保存
+            current_model = self.external_model_var.get()
+            
+            # ボタンを無効化
+            self.refresh_ollama_button.config(state="disabled", text=tr("Loading..."))
+            
+            # OllamaProviderを使ってモデルを取得
+            from ..external_providers import OllamaProvider
+            base_url = self.base_url_var.get()
+            
+            # バックグラウンドで取得
+            def fetch_models():
+                try:
+                    provider = OllamaProvider(base_url=base_url)
+                    models = provider.get_models()
+                    
+                    # UIスレッドで更新
+                    self.after(0, lambda: self._update_ollama_models(models, current_model))
+                except Exception as e:
+                    logger.error(f"Failed to fetch Ollama models: {e}")
+                    self.after(0, lambda: self._update_ollama_models([], current_model, error=str(e)))
+            
+            import threading
+            thread = threading.Thread(target=fetch_models, daemon=True)
+            thread.start()
+            
+        except Exception as e:
+            logger.error(f"Error in _fetch_ollama_models: {e}")
+            messagebox.showerror(tr("Error"), f"Failed to fetch models: {str(e)}")
+            self.refresh_ollama_button.config(state="normal", text=tr("Refresh"))
+    
+    def _update_ollama_models(self, models: list, current_model: str, error: Optional[str] = None):
+        """Ollamaモデルリストを更新"""
+        try:
+            # ボタンを有効化
+            self.refresh_ollama_button.config(state="normal", text=tr("Refresh"))
+            
+            if error:
+                # 初期化中でなければエラーを表示
+                if hasattr(self, '_initialization_complete'):
+                    messagebox.showerror(tr("Error"), f"Failed to connect to Ollama: {error}")
+                else:
+                    logger.warning(f"Failed to connect to Ollama during initialization: {error}")
+                self.external_model_combo['values'] = []
+                return
+            
+            if not models:
+                # モデルがない場合
+                if hasattr(self, '_initialization_complete'):
+                    messagebox.showwarning(
+                        tr("No Models"), 
+                        tr("No models found in Ollama. Please pull a model first using 'ollama pull <model>'")
+                    )
+                self.external_model_combo['values'] = []
+                return
+            
+            # モデルリストを更新
+            self.external_model_combo['values'] = models
+            
+            # 現在のモデルがリストにある場合は選択を維持
+            if current_model in models:
+                self.external_model_var.set(current_model)
+            else:
+                # ない場合は最初のモデルを選択
+                self.external_model_var.set(models[0])
+                
+        except Exception as e:
+            logger.error(f"Error updating Ollama models: {e}")
+    
+    def _on_base_url_changed(self, *args):
+        """Base URLが変更された時の処理"""
+        # Ollamaが選択されている場合のみ
+        if self.provider_var.get() == "ollama":
+            # タイマーをリセット（連続入力に対応）
+            if hasattr(self, '_base_url_timer'):
+                self.after_cancel(self._base_url_timer)
+            # 500ms後にモデルを取得
+            self._base_url_timer = self.after(500, self._fetch_ollama_models)
     
     def _create_tooltip(self, widget, text):
         """ツールチップを作成"""
