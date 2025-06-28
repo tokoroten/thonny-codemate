@@ -35,6 +35,7 @@ __version__ = "0.1.0"
 # グローバル変数でプラグインの状態を管理
 _plugin_loaded = False
 _llm_client: Optional['LLMClient'] = None
+_is_generating = False  # LLMが生成中かどうかのフラグ
 
 
 def get_safe_logger(name: str) -> logging.Logger:
@@ -159,10 +160,35 @@ def load_plugin():
         raise
 
 
+def is_llm_busy() -> bool:
+    """
+    LLMが現在生成中かどうかを確認
+    """
+    global _is_generating
+    return _is_generating
+
+
+def set_llm_busy(busy: bool):
+    """
+    LLMの生成状態を設定
+    """
+    global _is_generating
+    _is_generating = busy
+
+
 def explain_selection_handler():
     """
     選択されたコードを説明するハンドラー
     """
+    # LLMが生成中の場合は実行しない
+    if is_llm_busy():
+        from tkinter import messagebox
+        messagebox.showwarning(
+            tr("LLM Busy"),
+            tr("Please wait for the current generation to complete.")
+        )
+        return
+    
     try:
         from thonny import get_workbench
         workbench = get_workbench()
@@ -251,6 +277,15 @@ def generate_from_comment_handler():
     """
     コメントからコードを生成するハンドラー
     """
+    # LLMが生成中の場合は実行しない
+    if is_llm_busy():
+        from tkinter import messagebox
+        messagebox.showwarning(
+            tr("LLM Busy"),
+            tr("Please wait for the current generation to complete.")
+        )
+        return
+    
     try:
         from thonny import get_workbench
         workbench = get_workbench()

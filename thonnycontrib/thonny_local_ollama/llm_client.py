@@ -304,25 +304,65 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
         
         # プロンプトタイプを確認
         prompt_type = workbench.get_option("llm.prompt_type", "default")
+        skill_level = workbench.get_option("llm.skill_level", "beginner")
+        output_language = workbench.get_option("llm.output_language", "auto")
+        
         if prompt_type == "custom":
-            # カスタムプロンプトの場合は、プログラミング言語と出力言語指示のみ追加
-            enhanced_prompt = base_prompt + f"\n\nCurrent programming language: {prog_language}"
+            # カスタムプロンプトの場合は、変数を置換
+            enhanced_prompt = base_prompt
+            
+            # スキルレベルの詳細な説明を作成
+            skill_level_descriptions = {
+                "beginner": "beginner (new to programming, needs detailed explanations, simple examples, and encouragement)",
+                "intermediate": "intermediate (familiar with basics, can understand technical terms, needs guidance on best practices)",
+                "advanced": "advanced (experienced developer, prefers concise technical explanations, interested in optimization and design patterns)"
+            }
+            
+            # 変数を置換
+            enhanced_prompt = enhanced_prompt.replace("{skill_level}", skill_level_descriptions.get(skill_level, skill_level))
+            enhanced_prompt = enhanced_prompt.replace("{language}", output_language if output_language != "auto" else "the user's language")
+            
+            # プログラミング言語を追加
+            enhanced_prompt += f"\n\nCurrent programming language: {prog_language}"
+            
+            # 出力言語指示を追加
             language_instruction = self._get_language_instruction()
             if language_instruction:
                 enhanced_prompt += language_instruction
+            
             return enhanced_prompt
         
         # デフォルトプロンプトの場合は、スキルレベル、プログラミング言語、出力言語を統合
-        skill_level = workbench.get_option("llm.skill_level", "beginner")
         
         # プログラミング言語の指示を追加
         enhanced_prompt = base_prompt + f"\n\nCurrent programming language: {prog_language}"
         
-        # スキルレベルの説明を追加
+        # スキルレベルの詳細な説明を追加
         skill_instructions = {
-            "beginner": "\n\nIMPORTANT: The user is a beginner. Use very simple language, avoid jargon, give short clear examples.",
-            "intermediate": "\n\nIMPORTANT: The user has intermediate knowledge. Be concise, use technical terms when appropriate.",
-            "advanced": "\n\nIMPORTANT: The user is experienced. Be extremely concise and technical. Skip basic explanations."
+            "beginner": """\n\nIMPORTANT: The user is a BEGINNER programmer. Follow these guidelines:
+- Use simple, everyday language and avoid technical jargon
+- Explain concepts step-by-step with clear examples
+- Provide encouragement and positive reinforcement
+- Anticipate common mistakes and explain how to avoid them
+- Use analogies to relate programming concepts to real-world scenarios
+- Keep code examples short and well-commented
+- Explain what each line of code does""",
+            "intermediate": """\n\nIMPORTANT: The user has INTERMEDIATE programming knowledge. Follow these guidelines:
+- Balance technical accuracy with clarity
+- Introduce best practices and coding standards
+- Explain the 'why' behind recommendations
+- Provide multiple solution approaches when relevant
+- Include error handling and edge cases
+- Reference documentation and useful resources
+- Encourage exploration of advanced features""",
+            "advanced": """\n\nIMPORTANT: The user is an ADVANCED programmer. Follow these guidelines:
+- Be concise and technically precise
+- Focus on optimization, performance, and design patterns
+- Discuss trade-offs and architectural decisions
+- Assume familiarity with programming concepts
+- Include advanced techniques and idioms
+- Reference relevant specifications and standards
+- Skip basic explanations unless specifically asked"""
         }
         
         # スキルレベルの指示を追加
@@ -344,7 +384,7 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
         
         if provider == "chatgpt":
             self._external_provider = ChatGPTProvider(
-                api_key=workbench.get_option("llm.api_key", ""),
+                api_key=workbench.get_option("llm.chatgpt_api_key", ""),
                 model=workbench.get_option("llm.external_model", "gpt-3.5-turbo")
             )
         elif provider == "ollama":
@@ -354,7 +394,7 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
             )
         elif provider == "openrouter":
             self._external_provider = OpenRouterProvider(
-                api_key=workbench.get_option("llm.api_key", ""),
+                api_key=workbench.get_option("llm.openrouter_api_key", ""),
                 model=workbench.get_option("llm.external_model", "meta-llama/llama-3.2-3b-instruct:free")
             )
     

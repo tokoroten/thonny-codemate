@@ -54,6 +54,8 @@ class LLMChatViewHTML(ttk.Frame):
         self._processing = False
         self._current_message = ""  # ストリーミング中のメッセージ
         self._stop_generation = False
+        self._first_token_received = False  # 最初のトークンを受け取ったか
+        self._generating_animation_id = None  # アニメーションのafter ID
         
         # HTMLが完全に読み込まれたかを追跡
         self._html_ready = False
@@ -617,7 +619,15 @@ class LLMChatViewHTML(ttk.Frame):
         self._processing = True
         self._current_message = ""
         self._stop_generation = False
+        self._first_token_received = False
         self.send_button.config(text="Stop", state=tk.NORMAL)
+        
+        # グローバルの生成状態を更新
+        from .. import set_llm_busy
+        set_llm_busy(True)
+        
+        # "Generating..."アニメーションを開始
+        self._start_generating_animation()
         
         # バックグラウンドで処理
         thread = threading.Thread(
@@ -766,10 +776,18 @@ Based on this context, {message}"""
                 msg_type, content = self.message_queue.get_nowait()
                 
                 if msg_type == "token":
+                    # 最初のトークンを受け取ったらアニメーションを停止
+                    if not self._first_token_received:
+                        self._first_token_received = True
+                        self._stop_generating_animation()
+                    
                     self._current_message += content
                     update_needed = True
                 
                 elif msg_type == "complete":
+                    # アニメーションを停止（まだ停止していない場合）
+                    self._stop_generating_animation()
+                    
                     # 現在のメッセージがある場合、最終的に確定
                     if self._current_message:
                         # ストリーミング中に既に追加されている場合は更新のみ
@@ -794,12 +812,23 @@ Based on this context, {message}"""
                     self._processing = False
                     self._stop_generation = False
                     self.send_button.config(text=tr("Send"), state=tk.NORMAL)
+                    
+                    # グローバルの生成状態を解除
+                    from .. import set_llm_busy
+                    set_llm_busy(False)
                 
                 elif msg_type == "error":
+                    # アニメーションを停止
+                    self._stop_generating_animation()
+                    
                     self._add_message("system", f"Error: {content}")
                     self._processing = False
                     self._stop_generation = False
                     self.send_button.config(text=tr("Send"), state=tk.NORMAL)
+                    
+                    # グローバルの生成状態を解除
+                    from .. import set_llm_busy
+                    set_llm_busy(False)
                 
                 elif msg_type == "info":
                     self._add_message("system", content)
@@ -841,6 +870,10 @@ Based on this context, {message}"""
     
     def explain_code(self, code: str):
         """コードを説明（外部から呼ばれる）"""
+        # 既に生成中の場合は何もしない（ハンドラー側でチェック済み）
+        if self._processing:
+            return
+        
         # 現在のファイルから言語を検出
         workbench = get_workbench()
         editor = workbench.get_editor_notebook().get_current_editor()
@@ -983,6 +1016,100 @@ Based on this context, {message}"""
                     
         except Exception as e:
             logger.error(f"Failed to load chat history: {e}")
+    
+    def _start_generating_animation(self):
+        """Generating...アニメーションを開始"""
+        try:
+            # 既存のアニメーションがあれば停止
+            if self._generating_animation_id:
+                self.after_cancel(self._generating_animation_id)
+                self._generating_animation_id = None
+            
+            # アニメーション用の初期メッセージを追加
+            self._add_message("assistant", tr("Generating..."))
+            self._animation_dots = 0
+            
+            # アニメーションを開始
+            self._update_animation()
+            
+        except Exception as e:
+            logger.error(f"Error starting animation: {e}")
+    
+    def _update_animation(self):
+        """アニメーションを更新"""
+        try:
+            if not self._processing or self._first_token_received:
+                return
+            
+            # ドットの数を更新（0〜3の循環）
+            self._animation_dots = (self._animation_dots + 1) % 4
+            dots = "." * self._animation_dots
+            
+            # 最後のメッセージを更新
+            if self.messages and self.messages[-1][0] == "assistant":
+                # 翻訳されたテキストを取得（ドットを除く）
+                base_text = tr("Generating...").rstrip(".")
+                self.messages[-1] = ("assistant", f"{base_text}{dots}")
+                
+                # JavaScriptで最後のメッセージを更新
+                try:
+                    js_code = f"""
+                    (function() {{
+                        var messages = document.querySelectorAll('.message.assistant');
+                        if (messages.length > 0) {{
+                            var lastMessage = messages[messages.length - 1];
+                            var contentDiv = lastMessage.querySelector('.message-content');
+                            if (contentDiv) {{
+                                contentDiv.innerHTML = '<p>{base_text}{dots}</p>';
+                            }}
+                        }}
+                    }})();
+                    """
+                    self.html_frame.run_javascript(js_code)
+                except Exception as e:
+                    logger.debug(f"Could not update animation: {e}")
+            
+            # 500ms後に再度更新
+            self._generating_animation_id = self.after(500, self._update_animation)
+            
+        except Exception as e:
+            logger.error(f"Error updating animation: {e}")
+    
+    def _stop_generating_animation(self):
+        """Generating...アニメーションを停止"""
+        try:
+            # アニメーションIDをキャンセル
+            if self._generating_animation_id:
+                self.after_cancel(self._generating_animation_id)
+                self._generating_animation_id = None
+            
+            # アニメーションメッセージを削除（実際のコンテンツがまだない場合）
+            if self._current_message == "" and self.messages and self.messages[-1][0] == "assistant":
+                # 最後のメッセージがアニメーションメッセージの場合は削除
+                base_text = tr("Generating...").rstrip(".")
+                if self.messages[-1][1].startswith(base_text):
+                    self.messages.pop()
+                    
+                    # JavaScriptで最後のメッセージを削除
+                    try:
+                        js_code = f"""
+                        (function() {{
+                            var messages = document.querySelectorAll('.message.assistant');
+                            if (messages.length > 0) {{
+                                var lastMessage = messages[messages.length - 1];
+                                var content = lastMessage.querySelector('.message-content');
+                                if (content && content.textContent.startsWith('{base_text}')) {{
+                                    lastMessage.remove();
+                                }}
+                            }}
+                        }})();
+                        """
+                        self.html_frame.run_javascript(js_code)
+                    except Exception as e:
+                        logger.debug(f"Could not remove animation message: {e}")
+            
+        except Exception as e:
+            logger.error(f"Error stopping animation: {e}")
     
     def _on_destroy(self, event):
         """ウィンドウが破棄される時のクリーンアップ"""

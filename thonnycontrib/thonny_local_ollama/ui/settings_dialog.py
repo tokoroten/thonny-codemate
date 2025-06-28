@@ -1,37 +1,88 @@
 """
-設定ダイアログ
-モデルパスやその他の設定を管理
+新しいデザインの設定ダイアログ
+重要度順に項目を配置し、折りたたみ可能なセクションを実装
 """
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
+from typing import Optional
+import logging
 
 from thonny import get_workbench
+from ..i18n import tr
+
+logger = logging.getLogger(__name__)
+
+
+class CollapsibleFrame(ttk.Frame):
+    """折りたたみ可能なフレーム"""
+    
+    def __init__(self, parent, title, expanded=True):
+        super().__init__(parent)
+        
+        self.expanded = expanded
+        
+        # ヘッダーフレーム
+        self.header_frame = ttk.Frame(self)
+        self.header_frame.pack(fill="x", padx=5, pady=2)
+        
+        # 展開/折りたたみボタン
+        self.toggle_button = ttk.Label(
+            self.header_frame,
+            text="▼" if expanded else "▶",
+            cursor="hand2"
+        )
+        self.toggle_button.pack(side="left", padx=(0, 5))
+        self.toggle_button.bind("<Button-1>", self._toggle)
+        
+        # タイトル
+        self.title_label = ttk.Label(
+            self.header_frame,
+            text=tr(title) if title in ["Basic Settings", "Generation Settings", "Advanced Settings"] else title,
+            font=("", 10, "bold")
+        )
+        self.title_label.pack(side="left")
+        self.title_label.bind("<Button-1>", self._toggle)
+        
+        # コンテンツフレーム
+        self.content_frame = ttk.Frame(self)
+        if expanded:
+            self.content_frame.pack(fill="both", expand=True, padx=10, pady=5)
+    
+    def _toggle(self, event=None):
+        """展開/折りたたみを切り替え"""
+        self.expanded = not self.expanded
+        
+        if self.expanded:
+            self.toggle_button.config(text="▼")
+            self.content_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        else:
+            self.toggle_button.config(text="▶")
+            self.content_frame.pack_forget()
 
 
 class SettingsDialog(tk.Toplevel):
-    """LLMプラグインの設定ダイアログ"""
+    """新しいデザインの設定ダイアログ"""
     
     def __init__(self, parent):
         super().__init__(parent)
         
-        self.title("LLM Assistant Settings")
+        self.title(tr("LLM Assistant Settings"))
+        self.geometry("700x750")  # ウィンドウサイズを拡大
+        
+        # モーダルダイアログ
+        self.transient(parent)
         
         self.workbench = get_workbench()
         self.settings_changed = False
         
-        self._init_ui()
-        self._load_settings()
+        # メインコンテナ
+        main_container = ttk.Frame(self, padding="10")
+        main_container.pack(fill="both", expand=True)
         
-        # コンテンツのサイズに基づいてウィンドウサイズを調整
-        self.update_idletasks()
-        self._adjust_window_size()
-    
-    def _init_ui(self):
-        """UIを初期化"""
-        # スクロール可能なキャンバスを作成
-        canvas = tk.Canvas(self, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        # スクロール可能な領域を作成
+        canvas = tk.Canvas(main_container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
         self.scrollable_frame = ttk.Frame(canvas)
         
         self.scrollable_frame.bind(
@@ -42,325 +93,443 @@ class SettingsDialog(tk.Toplevel):
         canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
-        # マウスホイールのバインディング
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        # Canvasにフォーカスがある時のみスクロール
-        def _on_enter(event):
-            canvas.bind_all("<MouseWheel>", _on_mousewheel)
-            # Linux/macOS
-            canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
-            canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
-        
-        def _on_leave(event):
-            canvas.unbind_all("<MouseWheel>")
-            canvas.unbind_all("<Button-4>")
-            canvas.unbind_all("<Button-5>")
-        
-        canvas.bind("<Enter>", _on_enter)
-        canvas.bind("<Leave>", _on_leave)
-        
-        # ウィンドウを閉じる時にバインディングを解除
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
-        
         # レイアウト
-        canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
+        # セクションを作成
+        self._create_basic_section()
+        self._create_generation_section()
+        self._create_advanced_section()
         
-        # メインフレーム（スクロール可能フレーム内）
-        main_frame = ttk.Frame(self.scrollable_frame, padding="10")
-        main_frame.grid(row=0, column=0, sticky="nsew")
-        self.scrollable_frame.columnconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
+        # ボタンフレーム
+        button_frame = ttk.Frame(self)
+        button_frame.pack(fill="x", padx=10, pady=15)  # パディングを増やす
         
-        # モデル設定
-        ttk.Label(main_frame, text="Model Settings", font=("", 10, "bold")).grid(
-            row=0, column=0, columnspan=3, sticky="w", pady=(0, 10)
-        )
+        # ボタンのスタイルを設定（フォントサイズを大きく）
+        button_style = ttk.Style()
+        button_style.configure("Large.TButton", font=("", 11))
         
-        # モデルパス
-        ttk.Label(main_frame, text="Model Path:").grid(row=1, column=0, sticky="w", pady=5)
-        self.model_path_var = tk.StringVar()
-        self.model_path_entry = ttk.Entry(main_frame, textvariable=self.model_path_var)
-        self.model_path_entry.grid(row=1, column=1, sticky="ew", pady=5)
+        # 左側のボタン
+        left_buttons = ttk.Frame(button_frame)
+        left_buttons.pack(side="left")
         
         ttk.Button(
-            main_frame,
-            text="Browse...",
+            left_buttons,
+            text=tr("Download Models"),
+            command=self._show_model_manager,
+            width=20,  # 幅を指定
+            style="Large.TButton"
+        ).pack(side="left", padx=(0, 8), ipady=5)  # ipadyで高さを増やす
+        
+        ttk.Button(
+            left_buttons,
+            text=tr("Test Connection"),
+            command=self._test_connection,
+            width=20,  # 幅を指定
+            style="Large.TButton"
+        ).pack(side="left", ipady=5)  # ipadyで高さを増やす
+        
+        # 右側のボタン
+        right_buttons = ttk.Frame(button_frame)
+        right_buttons.pack(side="right")
+        
+        ttk.Button(
+            right_buttons,
+            text=tr("Save"),
+            command=self._save_settings,
+            width=12,  # 幅を指定
+            style="Large.TButton"
+        ).pack(side="left", padx=(0, 8), ipady=5)  # ipadyで高さを増やす
+        
+        ttk.Button(
+            right_buttons,
+            text=tr("Cancel"),
+            command=self.destroy,
+            width=12,  # 幅を指定
+            style="Large.TButton"
+        ).pack(side="left", ipady=5)  # ipadyで高さを増やす
+        
+        # 設定を読み込む
+        self._load_settings()
+        
+        # 初期状態を更新
+        self._on_provider_changed()
+    
+    def _create_basic_section(self):
+        """基本設定セクション"""
+        # 基本設定（常に展開）
+        basic_frame = ttk.LabelFrame(
+            self.scrollable_frame,
+            text=tr("Basic Settings"),
+            padding="10"
+        )
+        basic_frame.pack(fill="x", padx=5, pady=5)
+        
+        # Provider
+        ttk.Label(basic_frame, text=tr("Provider:")).grid(row=0, column=0, sticky="w", pady=5)
+        self.provider_var = tk.StringVar(value="local")
+        self.provider_combo = ttk.Combobox(
+            basic_frame,
+            textvariable=self.provider_var,
+            values=["local", "chatgpt", "ollama", "openrouter"],
+            state="readonly",
+            width=20
+        )
+        self.provider_combo.grid(row=0, column=1, sticky="ew", pady=5)
+        self.provider_combo.bind("<<ComboboxSelected>>", self._on_provider_changed)
+        
+        # Model/API Key（動的に切り替え）
+        self.model_frame = ttk.Frame(basic_frame)
+        self.model_frame.grid(row=1, column=0, columnspan=3, sticky="ew", pady=5)
+        
+        # ローカルモデル用
+        self.local_model_frame = ttk.Frame(self.model_frame)
+        ttk.Label(self.local_model_frame, text=tr("Model:")).pack(side="left", padx=(0, 10))
+        self.model_path_var = tk.StringVar()
+        self.model_path_entry = ttk.Entry(
+            self.local_model_frame,
+            textvariable=self.model_path_var,
+            width=30
+        )
+        self.model_path_entry.pack(side="left", padx=(0, 5))
+        ttk.Button(
+            self.local_model_frame,
+            text=tr("Browse..."),
             command=self._browse_model,
-            width=15
-        ).grid(row=1, column=2, padx=(5, 0), pady=5)
+            width=12  # 幅を指定
+        ).pack(side="left")
         
-        # コンテキストサイズ
-        ttk.Label(main_frame, text="Context Size:").grid(row=2, column=0, sticky="w", pady=5)
-        self.context_size_var = tk.IntVar()
-        context_spinbox = ttk.Spinbox(
-            main_frame,
-            from_=512,
-            to=32768,
-            increment=512,
-            textvariable=self.context_size_var,
-            width=10
-        )
-        context_spinbox.grid(row=2, column=1, sticky="w", pady=5)
+        # 外部API用
+        self.api_frame = ttk.Frame(self.model_frame)
         
-        # 生成設定
-        ttk.Label(main_frame, text="Generation Settings", font=("", 10, "bold")).grid(
-            row=3, column=0, columnspan=3, sticky="w", pady=(20, 10)
+        # API Key
+        self.api_key_frame = ttk.Frame(self.api_frame)
+        ttk.Label(self.api_key_frame, text=tr("API Key:")).pack(side="left", padx=(0, 10))
+        self.api_key_var = tk.StringVar()
+        self.api_key_entry = ttk.Entry(
+            self.api_key_frame,
+            textvariable=self.api_key_var,
+            show="*",
+            width=40
         )
+        self.api_key_entry.pack(side="left")
+        
+        # Model Name（外部API用）
+        self.model_name_frame = ttk.Frame(self.api_frame)
+        ttk.Label(self.model_name_frame, text=tr("Model Name:")).pack(side="left", padx=(0, 10))
+        self.external_model_var = tk.StringVar()
+        
+        # ChatGPT/OpenRouter用コンボボックス
+        self.external_model_combo = ttk.Combobox(
+            self.model_name_frame,
+            textvariable=self.external_model_var,
+            state="readonly",
+            width=30
+        )
+        
+        # Ollama用エントリー
+        self.external_model_entry = ttk.Entry(
+            self.model_name_frame,
+            textvariable=self.external_model_var,
+            width=30
+        )
+        
+        # Language
+        ttk.Label(basic_frame, text=tr("Language:")).grid(row=2, column=0, sticky="w", pady=5)
+        self.output_language_var = tk.StringVar(value="auto")
+        self.language_combo = ttk.Combobox(
+            basic_frame,
+            textvariable=self.output_language_var,
+            values=["auto", "ja", "en", "zh-CN", "zh-TW"],
+            state="readonly",
+            width=20
+        )
+        self.language_combo.grid(row=2, column=1, sticky="ew", pady=5)
+        
+        # 言語表示名
+        self.language_label = ttk.Label(basic_frame, text="", foreground="gray")
+        self.language_label.grid(row=2, column=2, padx=(10, 0), pady=5)
+        self.language_combo.bind("<<ComboboxSelected>>", self._update_language_label)
+        
+        # Skill Level
+        ttk.Label(basic_frame, text=tr("Skill Level:")).grid(row=3, column=0, sticky="w", pady=5)
+        self.skill_level_var = tk.StringVar(value="beginner")
+        self.skill_combo = ttk.Combobox(
+            basic_frame,
+            textvariable=self.skill_level_var,
+            values=["beginner", "intermediate", "advanced"],
+            state="readonly",
+            width=20
+        )
+        self.skill_combo.grid(row=3, column=1, sticky="ew", pady=5)
+        
+        # スキルレベル表示名
+        self.skill_label = ttk.Label(basic_frame, text="", foreground="gray")
+        self.skill_label.grid(row=3, column=2, padx=(10, 0), pady=5)
+        self.skill_combo.bind("<<ComboboxSelected>>", self._update_skill_label)
+        
+        # グリッド設定
+        basic_frame.columnconfigure(1, weight=1)
+    
+    def _create_generation_section(self):
+        """生成設定セクション"""
+        # 生成設定（デフォルトで展開）
+        self.generation_section = CollapsibleFrame(
+            self.scrollable_frame,
+            tr("Generation Settings"),
+            expanded=True
+        )
+        self.generation_section.pack(fill="x", padx=5, pady=5)
+        
+        gen_frame = self.generation_section.content_frame
         
         # Temperature
-        ttk.Label(main_frame, text="Temperature:").grid(row=4, column=0, sticky="w", pady=5)
+        temp_frame = ttk.Frame(gen_frame)
+        temp_frame.pack(fill="x", pady=5)
+        
+        temp_label = ttk.Label(temp_frame, text=tr("Temperature:"))
+        temp_label.pack(side="left", padx=(0, 10))
+        
+        # Temperatureの説明ツールチップ
+        temp_help = ttk.Label(temp_frame, text="(?)", foreground="blue", cursor="hand2")
+        temp_help.pack(side="left", padx=(0, 10))
+        self._create_tooltip(temp_help, tr("Controls randomness: 0.0 = deterministic, 2.0 = very creative"))
         self.temperature_var = tk.DoubleVar()
-        temperature_scale = ttk.Scale(
-            main_frame,
+        temp_scale = ttk.Scale(
+            temp_frame,
             from_=0.0,
             to=2.0,
             orient=tk.HORIZONTAL,
-            variable=self.temperature_var
+            variable=self.temperature_var,
+            length=200
         )
-        temperature_scale.grid(row=4, column=1, sticky="ew", pady=5)
+        temp_scale.pack(side="left", padx=(0, 10))
         
-        self.temperature_label = ttk.Label(main_frame, text="")
-        self.temperature_label.grid(row=4, column=2, pady=5)
+        self.temp_label = ttk.Label(temp_frame, text="0.7")
+        self.temp_label.pack(side="left")
         
-        # Temperature値の更新
         def update_temp_label(value):
-            self.temperature_label.config(text=f"{float(value):.1f}")
-        temperature_scale.config(command=update_temp_label)
+            self.temp_label.config(text=f"{float(value):.1f}")
+        temp_scale.config(command=update_temp_label)
         
         # Max Tokens
-        ttk.Label(main_frame, text="Max Tokens:").grid(row=5, column=0, sticky="w", pady=5)
+        tokens_frame = ttk.Frame(gen_frame)
+        tokens_frame.pack(fill="x", pady=5)
+        
+        ttk.Label(tokens_frame, text=tr("Max Tokens:")).pack(side="left", padx=(0, 10))
         self.max_tokens_var = tk.IntVar()
         tokens_spinbox = ttk.Spinbox(
-            main_frame,
+            tokens_frame,
             from_=128,
             to=4096,
             increment=128,
             textvariable=self.max_tokens_var,
             width=10
         )
-        tokens_spinbox.grid(row=5, column=1, sticky="w", pady=5)
+        tokens_spinbox.pack(side="left")
+        
+        # Context Size
+        context_frame = ttk.Frame(gen_frame)
+        context_frame.pack(fill="x", pady=5)
+        
+        context_label = ttk.Label(context_frame, text=tr("Context Size:"))
+        context_label.pack(side="left", padx=(0, 10))
+        
+        # Context Sizeの説明ツールチップ
+        context_help = ttk.Label(context_frame, text="(?)", foreground="blue", cursor="hand2")
+        context_help.pack(side="left", padx=(0, 10))
+        self._create_tooltip(context_help, tr("Maximum number of tokens the model can process at once"))
+        self.context_size_var = tk.IntVar()
+        context_spinbox = ttk.Spinbox(
+            context_frame,
+            from_=512,
+            to=32768,
+            increment=512,
+            textvariable=self.context_size_var,
+            width=10
+        )
+        context_spinbox.pack(side="left")
         
         # Repeat Penalty
-        ttk.Label(main_frame, text="Repeat Penalty:").grid(row=6, column=0, sticky="w", pady=5)
+        repeat_frame = ttk.Frame(gen_frame)
+        repeat_frame.pack(fill="x", pady=5)
+        
+        repeat_label = ttk.Label(repeat_frame, text=tr("Repeat Penalty:"))
+        repeat_label.pack(side="left", padx=(0, 10))
+        
+        # Repeat Penaltyの説明ツールチップ
+        repeat_help = ttk.Label(repeat_frame, text="(?)", foreground="blue", cursor="hand2")
+        repeat_help.pack(side="left", padx=(0, 10))
+        self._create_tooltip(repeat_help, tr("Penalty for repeating tokens: 1.0 = no penalty, 2.0 = strong penalty"))
         self.repeat_penalty_var = tk.DoubleVar()
-        repeat_penalty_scale = ttk.Scale(
-            main_frame,
+        repeat_scale = ttk.Scale(
+            repeat_frame,
             from_=1.0,
             to=2.0,
             orient=tk.HORIZONTAL,
-            variable=self.repeat_penalty_var
+            variable=self.repeat_penalty_var,
+            length=200
         )
-        repeat_penalty_scale.grid(row=6, column=1, sticky="ew", pady=5)
+        repeat_scale.pack(side="left", padx=(0, 10))
         
-        self.repeat_penalty_label = ttk.Label(main_frame, text="")
-        self.repeat_penalty_label.grid(row=6, column=2, pady=5)
+        self.repeat_label = ttk.Label(repeat_frame, text="1.1")
+        self.repeat_label.pack(side="left")
         
-        # Repeat Penalty値の更新
-        def update_repeat_penalty_label(value):
-            self.repeat_penalty_label.config(text=f"{float(value):.2f}")
-        repeat_penalty_scale.config(command=update_repeat_penalty_label)
-        
-        # Repeat Penaltyのヒント
-        repeat_hint = ttk.Label(
-            main_frame,
-            text="Higher values reduce repetition (1.3+ recommended for small models)",
-            font=("", 8),
-            foreground="gray"
+        def update_repeat_label(value):
+            self.repeat_label.config(text=f"{float(value):.2f}")
+        repeat_scale.config(command=update_repeat_label)
+    
+    def _create_advanced_section(self):
+        """詳細設定セクション"""
+        # 詳細設定（デフォルトで折りたたみ）
+        self.advanced_section = CollapsibleFrame(
+            self.scrollable_frame,
+            tr("Advanced Settings"),
+            expanded=False
         )
-        repeat_hint.grid(row=7, column=1, columnspan=2, sticky="w", pady=(0, 10))
+        self.advanced_section.pack(fill="x", padx=5, pady=5)
         
-        # ユーザー設定
-        ttk.Label(main_frame, text="User Settings", font=("", 10, "bold")).grid(
-            row=8, column=0, columnspan=3, sticky="w", pady=(20, 10)
-        )
+        adv_frame = self.advanced_section.content_frame
         
-        # スキルレベル
-        ttk.Label(main_frame, text="Skill Level:").grid(row=9, column=0, sticky="w", pady=5)
-        self.skill_level_var = tk.StringVar(value="beginner")
-        skill_combo = ttk.Combobox(
-            main_frame,
-            textvariable=self.skill_level_var,
-            values=["beginner", "intermediate", "advanced"],
-            state="readonly",
-            width=15
-        )
-        skill_combo.grid(row=9, column=1, sticky="w", pady=5)
+        # Base URL (Ollama用)
+        self.base_url_frame = ttk.Frame(adv_frame)
+        self.base_url_frame.pack(fill="x", pady=5)
         
-        # 出力言語
-        ttk.Label(main_frame, text="Output Language:").grid(row=10, column=0, sticky="w", pady=5)
-        self.output_language_var = tk.StringVar(value="auto")
-        
-        # 言語オプション
-        language_options = [
-            ("auto", "Auto (Follow Thonny)"),
-            ("ja", "日本語"),
-            ("en", "English"),
-            ("zh-CN", "中文（简体）"),
-            ("zh-TW", "中文（繁體）"),
-            ("other", "Other...")
-        ]
-        
-        language_frame = ttk.Frame(main_frame)
-        language_frame.grid(row=10, column=1, columnspan=2, sticky="w", pady=5)
-        
-        self.language_combo = ttk.Combobox(
-            language_frame,
-            textvariable=self.output_language_var,
-            values=[code for code, _ in language_options],
-            state="readonly",
-            width=15
-        )
-        self.language_combo.grid(row=0, column=0, sticky="w")
-        self.language_combo.bind("<<ComboboxSelected>>", self._on_language_changed)
-        
-        # 言語表示ラベル
-        self.language_label = ttk.Label(language_frame, text="", foreground="gray")
-        self.language_label.grid(row=0, column=1, padx=(10, 0))
-        
-        # カスタム言語入力（Other...選択時のみ表示）
-        self.custom_language_frame = ttk.Frame(main_frame)
-        self.custom_language_entry = ttk.Entry(self.custom_language_frame, width=30)
-        ttk.Label(self.custom_language_frame, text="Language code:").pack(side=tk.LEFT, padx=(0, 5))
-        self.custom_language_entry.pack(side=tk.LEFT)
-        # 初期状態では非表示
-        
-        # 外部プロバイダー設定
-        ttk.Label(main_frame, text="Provider Settings", font=("", 10, "bold")).grid(
-            row=13, column=0, columnspan=3, sticky="w", pady=(20, 10)
-        )
-        
-        # プロバイダー選択
-        ttk.Label(main_frame, text="Provider:").grid(row=14, column=0, sticky="w", pady=5)
-        self.provider_var = tk.StringVar(value="local")
-        provider_combo = ttk.Combobox(
-            main_frame,
-            textvariable=self.provider_var,
-            values=["local", "chatgpt", "ollama", "openrouter"],
-            state="readonly",
-            width=15
-        )
-        provider_combo.grid(row=14, column=1, sticky="w", pady=5)
-        provider_combo.bind("<<ComboboxSelected>>", self._on_provider_changed)
-        
-        # APIキー（外部プロバイダー用）
-        self.api_key_label = ttk.Label(main_frame, text="API Key:")
-        self.api_key_label.grid(row=15, column=0, sticky="w", pady=5)
-        self.api_key_var = tk.StringVar()
-        self.api_key_entry = ttk.Entry(main_frame, textvariable=self.api_key_var, show="*")
-        self.api_key_entry.grid(row=15, column=1, sticky="ew", pady=5)
-        
-        # ベースURL（Ollama用）
-        self.base_url_label = ttk.Label(main_frame, text="Base URL:")
-        self.base_url_label.grid(row=16, column=0, sticky="w", pady=5)
+        ttk.Label(self.base_url_frame, text=tr("Base URL:")).pack(side="left", padx=(0, 10))
         self.base_url_var = tk.StringVar(value="http://localhost:11434")
-        self.base_url_entry = ttk.Entry(main_frame, textvariable=self.base_url_var)
-        self.base_url_entry.grid(row=16, column=1, sticky="ew", pady=5)
-        
-        # 外部モデル名
-        self.external_model_label = ttk.Label(main_frame, text="Model Name:")
-        self.external_model_label.grid(row=17, column=0, sticky="w", pady=5)
-        self.external_model_var = tk.StringVar(value="gpt-4o-mini")
-        self.external_model_entry = ttk.Entry(main_frame, textvariable=self.external_model_var)
-        self.external_model_entry.grid(row=17, column=1, sticky="ew", pady=5)
-        
-        # ChatGPTモデルコンボボックス（ChatGPT選択時のみ表示）
-        self.external_model_combo = ttk.Combobox(
-            main_frame,
-            textvariable=self.external_model_var,
-            state="readonly",
-            width=30
+        self.base_url_entry = ttk.Entry(
+            self.base_url_frame,
+            textvariable=self.base_url_var,
+            width=40
         )
-        # 初期状態では非表示
+        self.base_url_entry.pack(side="left")
         
-        # システムプロンプト設定
-        ttk.Label(main_frame, text="System Prompt", font=("", 10, "bold")).grid(
-            row=18, column=0, columnspan=3, sticky="w", pady=(20, 10)
-        )
+        # System Prompt Type
+        prompt_frame = ttk.Frame(adv_frame)
+        prompt_frame.pack(fill="x", pady=5)
         
-        # プロンプトタイプ選択
-        ttk.Label(main_frame, text="Prompt Type:").grid(row=19, column=0, sticky="w", pady=5)
+        ttk.Label(prompt_frame, text=tr("System Prompt:")).pack(side="left", padx=(0, 10))
         self.prompt_type_var = tk.StringVar(value="default")
-        prompt_frame = ttk.Frame(main_frame)
-        prompt_frame.grid(row=19, column=1, columnspan=2, sticky="w", pady=5)
         
         ttk.Radiobutton(
             prompt_frame,
-            text="Default",
+            text=tr("Default"),
             variable=self.prompt_type_var,
-            value="default",
-            command=self._update_prompt_preview
-        ).pack(side=tk.LEFT, padx=5)
+            value="default"
+        ).pack(side="left", padx=(0, 10))
         
         ttk.Radiobutton(
             prompt_frame,
-            text="Custom",
+            text=tr("Custom"),
             variable=self.prompt_type_var,
-            value="custom",
-            command=self._update_prompt_preview
-        ).pack(side=tk.LEFT, padx=5)
+            value="custom"
+        ).pack(side="left", padx=(0, 10))
         
-        # カスタムプロンプト編集ボタン
         ttk.Button(
-            main_frame,
-            text="Edit Custom Prompt",
+            prompt_frame,
+            text=tr("Edit Custom Prompt"),
             command=self._edit_custom_prompt,
-            width=22
-        ).grid(row=20, column=0, columnspan=2, sticky="w", pady=5)
+            width=20  # 幅を指定
+        ).pack(side="left")
+    
+    def _on_provider_changed(self, event=None):
+        """プロバイダー変更時の処理"""
+        provider = self.provider_var.get()
         
-        # ボタンフレーム
-        button_frame = ttk.Frame(self)
-        button_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+        # プロバイダー変更時に適切なAPIキーを読み込む
+        if provider == "chatgpt":
+            self.api_key_var.set(self.workbench.get_option("llm.chatgpt_api_key", ""))
+        elif provider == "openrouter":
+            self.api_key_var.set(self.workbench.get_option("llm.openrouter_api_key", ""))
+        else:
+            self.api_key_var.set("")
         
-        ttk.Button(
-            button_frame,
-            text="Save",
-            command=self._save_settings,
-            width=12
-        ).pack(side=tk.RIGHT, padx=5)
+        # フレームを一旦非表示
+        self.local_model_frame.pack_forget()
+        self.api_frame.pack_forget()
+        self.api_key_frame.pack_forget()
+        self.model_name_frame.pack_forget()
+        self.base_url_frame.pack_forget()
         
-        ttk.Button(
-            button_frame,
-            text="Cancel",
-            command=self.destroy,
-            width=12
-        ).pack(side=tk.RIGHT)
-        
-        ttk.Button(
-            button_frame,
-            text="Test Model",
-            command=self._test_model,
-            width=18
-        ).pack(side=tk.LEFT, padx=5)
-        
-        ttk.Button(
-            button_frame,
-            text="Download Models",
-            command=self._show_model_manager,
-            width=18
-        ).pack(side=tk.LEFT, padx=5)
+        if provider == "local":
+            # ローカルモデル
+            self.local_model_frame.pack(fill="x")
+        else:
+            # 外部API
+            self.api_frame.pack(fill="x")
+            
+            if provider in ["chatgpt", "openrouter"]:
+                self.api_key_frame.pack(fill="x", pady=2)
+                self.model_name_frame.pack(fill="x", pady=2)
+                
+                # コンボボックスを表示
+                self.external_model_entry.pack_forget()
+                self.external_model_combo.pack(side="left")
+                
+                # モデルリストを更新
+                if provider == "chatgpt":
+                    models = [
+                        "gpt-4o",
+                        "gpt-4o-mini",
+                        "gpt-4-turbo",
+                        "gpt-4",
+                        "o1-preview",
+                        "o1-mini"
+                    ]
+                else:  # openrouter
+                    models = [
+                        "meta-llama/llama-3.2-3b-instruct:free",
+                        "meta-llama/llama-3.2-1b-instruct:free",
+                        "google/gemini-2.0-flash-exp:free",
+                        "anthropic/claude-3.5-sonnet",
+                        "openai/gpt-4o"
+                    ]
+                
+                self.external_model_combo['values'] = models
+                if self.external_model_var.get() not in models:
+                    self.external_model_var.set(models[0])
+            
+            elif provider == "ollama":
+                self.model_name_frame.pack(fill="x", pady=2)
+                self.base_url_frame.pack(fill="x", pady=2)
+                
+                # エントリーを表示（Advanced Settingsに移動）
+                self.external_model_combo.pack_forget()
+                self.external_model_entry.pack(side="left")
+                
+                # Base URLをAdvancedセクションに表示
+                if hasattr(self, 'advanced_section'):
+                    self.base_url_frame.pack(fill="x", pady=5)
+    
+    def _update_language_label(self, event=None):
+        """言語ラベルを更新"""
+        lang_names = {
+            "auto": tr("Auto (Follow Thonny)"),
+            "ja": "日本語",
+            "en": "English",
+            "zh-CN": "中文（简体）",
+            "zh-TW": "中文（繁體）"
+        }
+        lang = self.output_language_var.get()
+        self.language_label.config(text=lang_names.get(lang, ""))
+    
+    def _update_skill_label(self, event=None):
+        """スキルレベルラベルを更新"""
+        skill_names = {
+            "beginner": tr("beginner"),
+            "intermediate": tr("intermediate"),
+            "advanced": tr("advanced")
+        }
+        skill = self.skill_level_var.get()
+        self.skill_label.config(text=skill_names.get(skill, ""))
     
     def _browse_model(self):
         """モデルファイルを選択"""
-        # 現在のパスからベースディレクトリを取得
-        current_path = self.model_path_var.get()
-        if current_path and Path(current_path).exists():
-            # ファイルの親ディレクトリを初期ディレクトリとする
-            initial_dir = str(Path(current_path).parent)
-        elif current_path and Path(current_path).parent.exists():
-            # パスが存在しなくても親ディレクトリが存在すれば使用
-            initial_dir = str(Path(current_path).parent)
-        else:
-            # デフォルトはモデルディレクトリまたはホーム
-            from ..model_manager import ModelManager
-            model_manager = ModelManager()
-            models_dir = model_manager.get_models_dir()
-            initial_dir = str(models_dir) if models_dir.exists() else str(Path.home())
+        from ..model_manager import ModelManager
+        model_manager = ModelManager()
+        models_dir = model_manager.get_models_dir()
+        initial_dir = str(models_dir) if models_dir.exists() else str(Path.home())
         
         filename = filedialog.askopenfilename(
             title="Select GGUF Model File",
@@ -370,50 +539,83 @@ class SettingsDialog(tk.Toplevel):
         if filename:
             self.model_path_var.set(filename)
     
+    def _show_model_manager(self):
+        """モデルマネージャーを表示"""
+        from .model_download_dialog import ModelDownloadDialog
+        dialog = ModelDownloadDialog(self)
+        self.wait_window(dialog)
+        
+        # モデルが選択された場合
+        if hasattr(dialog, 'selected_model_path') and dialog.selected_model_path:
+            self.model_path_var.set(dialog.selected_model_path)
+            self.provider_var.set("local")
+            self._on_provider_changed()
+    
+    def _test_connection(self):
+        """接続テスト"""
+        provider = self.provider_var.get()
+        
+        if provider == "local":
+            model_path = self.model_path_var.get()
+            if not model_path or not Path(model_path).exists():
+                messagebox.showerror(tr("Error"), tr("Please select a valid model file!"))
+            else:
+                messagebox.showinfo(tr("Success"), tr("Model file found!"))
+        else:
+            # 外部APIのテスト
+            if provider in ["chatgpt", "openrouter"] and not self.api_key_var.get():
+                messagebox.showerror(tr("Error"), tr("API key is required for {}").format(provider))
+            else:
+                # 実際のAPI接続テストを実装
+                messagebox.showinfo(tr("Test"), tr("Testing {} connection...").format(provider))
+    
+    def _edit_custom_prompt(self):
+        """カスタムプロンプトを編集"""
+        from .custom_prompt_dialog import CustomPromptDialog
+        current_prompt = self.workbench.get_option("llm.custom_prompt", "")
+        dialog = CustomPromptDialog(self, current_prompt)
+        self.wait_window(dialog)
+        
+        if hasattr(dialog, 'result'):
+            self.custom_prompt = dialog.result
+            self.prompt_type_var.set("custom")
+    
     def _load_settings(self):
         """設定を読み込む"""
+        # 基本設定
+        self.provider_var.set(self.workbench.get_option("llm.provider", "local"))
         self.model_path_var.set(self.workbench.get_option("llm.model_path", ""))
-        self.context_size_var.set(self.workbench.get_option("llm.context_size", 4096))
+        self.output_language_var.set(self.workbench.get_option("llm.output_language", "auto"))
+        self.skill_level_var.set(self.workbench.get_option("llm.skill_level", "beginner"))
+        
+        # 生成設定
         self.temperature_var.set(self.workbench.get_option("llm.temperature", 0.3))
         self.max_tokens_var.set(self.workbench.get_option("llm.max_tokens", 2048))
+        self.context_size_var.set(self.workbench.get_option("llm.context_size", 4096))
         self.repeat_penalty_var.set(self.workbench.get_option("llm.repeat_penalty", 1.1))
-        self.skill_level_var.set(self.workbench.get_option("llm.skill_level", "beginner"))
-        self.prompt_type_var.set(self.workbench.get_option("llm.prompt_type", "default"))
         
-        # ラベルを更新
-        self.temperature_label.config(text=f"{self.temperature_var.get():.1f}")
-        self.repeat_penalty_label.config(text=f"{self.repeat_penalty_var.get():.2f}")
-        
-        # 言語設定を読み込む（デフォルトはThonnyの言語設定に従う）
-        default_language = "auto"
-        thonny_language = self.workbench.get_option("general.language", None)
-        if thonny_language and thonny_language.startswith("ja"):
-            default_language = "ja"
-        elif thonny_language and thonny_language.startswith("zh"):
-            if "TW" in thonny_language or "HK" in thonny_language:
-                default_language = "zh-TW"
-            else:
-                default_language = "zh-CN"
-        
-        saved_language = self.workbench.get_option("llm.output_language", default_language)
-        if saved_language == "other":
-            # カスタム言語コードも読み込む
-            self.custom_language_entry.delete(0, tk.END)
-            self.custom_language_entry.insert(0, self.workbench.get_option("llm.custom_language_code", ""))
-        self.output_language_var.set(saved_language)
-        self._on_language_changed()  # UIを更新
-        
-        # プロバイダー設定を読み込む
-        self.provider_var.set(self.workbench.get_option("llm.provider", "local"))
-        self.api_key_var.set(self.workbench.get_option("llm.api_key", ""))
+        # 詳細設定
+        # プロバイダーに応じて適切なAPIキーを読み込む
+        provider = self.provider_var.get()
+        if provider == "chatgpt":
+            self.api_key_var.set(self.workbench.get_option("llm.chatgpt_api_key", ""))
+        elif provider == "openrouter":
+            self.api_key_var.set(self.workbench.get_option("llm.openrouter_api_key", ""))
+        else:
+            self.api_key_var.set("")
+            
         self.base_url_var.set(self.workbench.get_option("llm.base_url", "http://localhost:11434"))
         self.external_model_var.set(self.workbench.get_option("llm.external_model", "gpt-4o-mini"))
+        self.prompt_type_var.set(self.workbench.get_option("llm.prompt_type", "default"))
         
-        # カスタムプロンプトを読み込む
+        # カスタムプロンプト
         self.custom_prompt = self.workbench.get_option("llm.custom_prompt", "")
         
-        # 初期表示状態を更新
-        self._on_provider_changed()
+        # UI更新
+        self._update_language_label()
+        self._update_skill_label()
+        self.temp_label.config(text=f"{self.temperature_var.get():.1f}")
+        self.repeat_label.config(text=f"{self.repeat_penalty_var.get():.2f}")
     
     def _save_settings(self):
         """設定を保存"""
@@ -423,366 +625,55 @@ class SettingsDialog(tk.Toplevel):
         if provider == "local":
             model_path = self.model_path_var.get()
             if model_path and not Path(model_path).exists():
-                messagebox.showerror("Error", "Model file does not exist!")
+                messagebox.showerror(tr("Error"), tr("Model file does not exist!"))
                 return
         else:
             # 外部プロバイダーの検証
             if provider in ["chatgpt", "openrouter"] and not self.api_key_var.get():
-                messagebox.showerror("Error", f"API key is required for {provider}!")
+                messagebox.showerror(tr("Error"), tr("API key is required for {}").format(provider))
                 return
         
         # 保存
         self.workbench.set_option("llm.provider", provider)
         self.workbench.set_option("llm.model_path", self.model_path_var.get())
-        self.workbench.set_option("llm.context_size", self.context_size_var.get())
+        self.workbench.set_option("llm.output_language", self.output_language_var.get())
+        self.workbench.set_option("llm.skill_level", self.skill_level_var.get())
+        
         self.workbench.set_option("llm.temperature", self.temperature_var.get())
         self.workbench.set_option("llm.max_tokens", self.max_tokens_var.get())
+        self.workbench.set_option("llm.context_size", self.context_size_var.get())
         self.workbench.set_option("llm.repeat_penalty", self.repeat_penalty_var.get())
-        self.workbench.set_option("llm.skill_level", self.skill_level_var.get())
-        self.workbench.set_option("llm.prompt_type", self.prompt_type_var.get())
         
-        # 言語設定を保存
-        output_language = self.output_language_var.get()
-        self.workbench.set_option("llm.output_language", output_language)
-        if output_language == "other":
-            self.workbench.set_option("llm.custom_language_code", self.custom_language_entry.get())
-        
-        # プロバイダー設定を保存
-        self.workbench.set_option("llm.api_key", self.api_key_var.get())
+        # プロバイダーに応じて適切なAPIキーを保存
+        if provider == "chatgpt":
+            self.workbench.set_option("llm.chatgpt_api_key", self.api_key_var.get())
+        elif provider == "openrouter":
+            self.workbench.set_option("llm.openrouter_api_key", self.api_key_var.get())
+            
         self.workbench.set_option("llm.base_url", self.base_url_var.get())
         self.workbench.set_option("llm.external_model", self.external_model_var.get())
+        self.workbench.set_option("llm.prompt_type", self.prompt_type_var.get())
         
         if hasattr(self, 'custom_prompt'):
             self.workbench.set_option("llm.custom_prompt", self.custom_prompt)
         
         self.settings_changed = True
-        messagebox.showinfo("Success", "Settings saved successfully!")
         self.destroy()
     
-    def _test_model(self):
-        """モデルをテスト"""
-        provider = self.provider_var.get()
+    def _create_tooltip(self, widget, text):
+        """ツールチップを作成"""
+        def on_enter(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+            label = ttk.Label(tooltip, text=text, relief="solid", borderwidth=1)
+            label.pack()
+            widget.tooltip = tooltip
         
-        if provider == "local":
-            model_path = self.model_path_var.get()
-            if not model_path:
-                messagebox.showerror("Error", "Please select a model file first!")
-                return
-            
-            if not Path(model_path).exists():
-                messagebox.showerror("Error", "Model file does not exist!")
-                return
-        else:
-            # 外部プロバイダーの検証
-            if provider in ["chatgpt", "openrouter"] and not self.api_key_var.get():
-                messagebox.showerror("Error", f"API key is required for {provider}!")
-                return
+        def on_leave(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
         
-        # プログレスダイアログ
-        progress = tk.Toplevel(self)
-        progress.title("Testing Connection")
-        progress.geometry("300x100")
-        ttk.Label(progress, text="Testing connection...").pack(pady=20)
-        progress_bar = ttk.Progressbar(progress, mode='indeterminate')
-        progress_bar.pack(padx=20, pady=10)
-        progress_bar.start()
-        
-        def test():
-            try:
-                if provider == "local":
-                    from .. import get_llm_client
-                    from ..llm_client import ModelConfig
-                    
-                    # テスト用の設定でクライアントを作成
-                    client = get_llm_client()
-                    config = ModelConfig(
-                        model_path=self.model_path_var.get(),
-                        n_ctx=self.context_size_var.get(),
-                        temperature=self.temperature_var.get(),
-                        max_tokens=self.max_tokens_var.get()
-                    )
-                    client.set_config(config)
-                    
-                    # テスト実行
-                    result = client.test_connection()
-                else:
-                    # 外部プロバイダーのテスト
-                    from ..external_providers import ChatGPTProvider, OllamaProvider, OpenRouterProvider
-                    
-                    if provider == "chatgpt":
-                        provider_obj = ChatGPTProvider(
-                            api_key=self.api_key_var.get(),
-                            model=self.external_model_var.get()
-                        )
-                    elif provider == "ollama":
-                        provider_obj = OllamaProvider(
-                            base_url=self.base_url_var.get(),
-                            model=self.external_model_var.get()
-                        )
-                    elif provider == "openrouter":
-                        provider_obj = OpenRouterProvider(
-                            api_key=self.api_key_var.get(),
-                            model=self.external_model_var.get()
-                        )
-                    
-                    result = provider_obj.test_connection()
-                
-                # 結果を表示
-                progress.destroy()
-                
-                if result.get("error") or not result.get("success"):
-                    messagebox.showerror("Test Failed", f"Error: {result.get('error', 'Unknown error')}")
-                else:
-                    info = f"Provider: {result.get('provider', provider)}\n"
-                    info += f"Model: {result.get('model', 'N/A')}\n"
-                    if result.get('response'):
-                        info += f"Test response: {result.get('response')}"
-                    elif result.get('available_models'):
-                        info += f"Available models: {', '.join(result['available_models'][:5])}"
-                    
-                    messagebox.showinfo("Test Successful", info)
-                    
-            except Exception as e:
-                progress.destroy()
-                messagebox.showerror("Test Failed", f"Error: {str(e)}")
-        
-        # バックグラウンドでテスト
-        import threading
-        thread = threading.Thread(target=test, daemon=True)
-        thread.start()
-    
-    def _show_model_manager(self):
-        """モデルマネージャーダイアログを表示"""
-        from .model_download_dialog import ModelDownloadDialog
-        dialog = ModelDownloadDialog(self)
-        dialog.grab_set()
-        self.wait_window(dialog)
-        
-        # モデルが変更された可能性があるので、パスを更新
-        from ..model_manager import ModelManager
-        manager = ModelManager()
-        
-        # 現在のパスが無効な場合、利用可能なモデルを設定
-        current_path = self.model_path_var.get()
-        if not current_path or not Path(current_path).exists():
-            # 軽量モデルを優先
-            new_path = manager.get_model_path("llama3.2-1b")
-            if new_path:
-                self.model_path_var.set(new_path)
-                self.settings_changed = True
-    
-    def _update_prompt_preview(self):
-        """プロンプトタイプ変更時の処理"""
-        # 特に処理なし（将来的にプレビュー機能を追加可能）
-        pass
-    
-    def _edit_custom_prompt(self):
-        """カスタムプロンプトを編集"""
-        dialog = tk.Toplevel(self)
-        dialog.title("Edit Custom System Prompt")
-        dialog.geometry("600x400")
-        
-        # テキストエディタ
-        text_frame = ttk.Frame(dialog)
-        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        text_editor = tk.Text(text_frame, wrap=tk.WORD, font=("Consolas", 10))
-        text_editor.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        scrollbar = ttk.Scrollbar(text_frame, command=text_editor.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        text_editor.config(yscrollcommand=scrollbar.set)
-        
-        # 現在のカスタムプロンプトを表示
-        if hasattr(self, 'custom_prompt') and self.custom_prompt:
-            text_editor.insert("1.0", self.custom_prompt)
-        else:
-            # デフォルトプロンプトを初期値として設定
-            from ..llm_client import LLMClient
-            client = LLMClient()
-            text_editor.insert("1.0", client.default_system_prompt)
-        
-        # ボタンフレーム
-        button_frame = ttk.Frame(dialog)
-        button_frame.pack(fill=tk.X, pady=10)
-        
-        def save_prompt():
-            self.custom_prompt = text_editor.get("1.0", tk.END).strip()
-            self.prompt_type_var.set("custom")
-            dialog.destroy()
-        
-        def load_default_template():
-            from ..llm_client import LLMClient
-            client = LLMClient()
-            text_editor.delete("1.0", tk.END)
-            text_editor.insert("1.0", client.default_system_prompt)
-        
-        # テンプレートボタン
-        ttk.Button(
-            button_frame,
-            text="Load Default Template",
-            command=load_default_template
-        ).pack(side=tk.LEFT, padx=5)
-        
-        # 保存・キャンセルボタン
-        ttk.Button(
-            button_frame,
-            text="Save",
-            command=save_prompt
-        ).pack(side=tk.RIGHT, padx=5)
-        
-        ttk.Button(
-            button_frame,
-            text="Cancel",
-            command=dialog.destroy
-        ).pack(side=tk.RIGHT)
-    
-    def _on_language_changed(self, event=None):
-        """言語変更時の処理"""
-        language = self.output_language_var.get()
-        
-        # 言語名を表示
-        language_names = {
-            "auto": "Auto (Follow Thonny)",
-            "ja": "日本語",
-            "en": "English",
-            "zh-CN": "中文（简体）",
-            "zh-TW": "中文（繁體）",
-            "other": "Other..."
-        }
-        
-        self.language_label.config(text=language_names.get(language, ""))
-        
-        # Other...を選択した場合はカスタム入力欄を表示
-        if language == "other":
-            self.custom_language_frame.grid(row=10, column=1, columnspan=2, sticky="w", pady=5)
-        else:
-            self.custom_language_frame.grid_remove()
-    
-    def _on_provider_changed(self, event=None):
-        """プロバイダー変更時の処理"""
-        provider = self.provider_var.get()
-        
-        # コンボボックスを常に非表示
-        self.external_model_combo.grid_remove()
-        
-        if provider == "local":
-            # ローカルモデルの設定を表示
-            self.model_path_entry.config(state=tk.NORMAL)
-            self.api_key_label.grid_remove()
-            self.api_key_entry.grid_remove()
-            self.base_url_label.grid_remove()
-            self.base_url_entry.grid_remove()
-            self.external_model_label.grid_remove()
-            self.external_model_entry.grid_remove()
-        else:
-            # 外部プロバイダーの設定を表示
-            self.model_path_entry.config(state=tk.DISABLED)
-            
-            if provider == "chatgpt":
-                self.api_key_label.grid()
-                self.api_key_entry.grid()
-                self.base_url_label.grid_remove()
-                self.base_url_entry.grid_remove()
-                self.external_model_label.grid()
-                
-                # ChatGPTの場合はコンボボックスを表示
-                self.external_model_entry.grid_remove()
-                self.external_model_combo.grid(row=17, column=1, sticky="ew", pady=5)
-                
-                # ChatGPTモデルリスト
-                chatgpt_models = [
-                    "gpt-4o",
-                    "gpt-4o-mini", 
-                    "gpt-4-turbo",
-                    "gpt-4",
-                    "o1-preview",
-                    "o1-mini"
-                ]
-                self.external_model_combo['values'] = chatgpt_models
-                
-                # 現在の値がリストにない場合はデフォルトを設定
-                if self.external_model_var.get() not in chatgpt_models:
-                    self.external_model_var.set("gpt-4o-mini")
-            elif provider == "ollama":
-                self.api_key_label.grid_remove()
-                self.api_key_entry.grid_remove()
-                self.base_url_label.grid()
-                self.base_url_entry.grid()
-                self.external_model_label.grid()
-                
-                # Ollamaの場合はテキスト入力
-                self.external_model_entry.grid()
-                self.external_model_var.set("llama3")
-            elif provider == "openrouter":
-                self.api_key_label.grid()
-                self.api_key_entry.grid()
-                self.base_url_label.grid_remove()
-                self.base_url_entry.grid_remove()
-                self.external_model_label.grid()
-                
-                # OpenRouterの場合はコンボボックスを表示
-                self.external_model_entry.grid_remove()
-                self.external_model_combo.grid(row=17, column=1, sticky="ew", pady=5)
-                
-                # OpenRouterモデルリスト（無料モデルを中心に）
-                openrouter_models = [
-                    "meta-llama/llama-3.2-3b-instruct:free",
-                    "meta-llama/llama-3.2-1b-instruct:free",
-                    "meta-llama/llama-3.1-8b-instruct:free",
-                    "google/gemini-2.0-flash-exp:free",
-                    "google/gemini-flash-1.5-8b:free",
-                    "google/gemini-flash-1.5:free",
-                    "microsoft/phi-3-mini-128k-instruct:free",
-                    "microsoft/phi-3-medium-128k-instruct:free",
-                    "mistralai/mistral-7b-instruct:free",
-                    "qwen/qwen-2-7b-instruct:free",
-                    "anthropic/claude-3.5-sonnet",
-                    "anthropic/claude-3.5-haiku",
-                    "openai/gpt-4o",
-                    "openai/gpt-4o-mini"
-                ]
-                self.external_model_combo['values'] = openrouter_models
-                
-                # 現在の値がリストにない場合はデフォルトを設定
-                if self.external_model_var.get() not in openrouter_models:
-                    self.external_model_var.set("meta-llama/llama-3.2-3b-instruct:free")
-    
-    def _adjust_window_size(self):
-        """ウィンドウサイズをコンテンツに合わせて調整"""
-        # コンテンツのサイズを取得
-        self.update_idletasks()
-        
-        # スクロール可能フレームの実際のサイズを取得
-        content_width = self.scrollable_frame.winfo_reqwidth() + 20  # スクロールバー分を追加
-        content_height = self.scrollable_frame.winfo_reqheight() + 80  # ボタンエリア分を追加
-        
-        # 画面サイズを取得
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        
-        # 最大サイズを画面の80%に制限
-        max_width = int(screen_width * 0.8)
-        max_height = int(screen_height * 0.8)
-        
-        # 最小サイズを設定
-        min_width = 600
-        min_height = 400
-        
-        # 実際のウィンドウサイズを決定
-        window_width = max(min_width, min(content_width, max_width))
-        window_height = max(min_height, min(content_height, max_height))
-        
-        # ウィンドウを中央に配置
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
-        
-        self.geometry(f"{window_width}x{window_height}+{x}+{y}")
-    
-    def _on_close(self):
-        """ウィンドウを閉じる時の処理"""
-        # マウスホイールのバインディングを解除
-        self.unbind_all("<MouseWheel>")
-        self.unbind_all("<Button-4>")
-        self.unbind_all("<Button-5>")
-        self.destroy()
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)

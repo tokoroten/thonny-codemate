@@ -55,7 +55,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "Save": "保存",
         "Cancel": "キャンセル",
         "Test Model": "モデルをテスト",
+        "Test": "テスト",
         "Download Models": "モデルをダウンロード",
+        "Test Connection": "接続テスト",
+        "Basic Settings": "基本設定",
+        "Advanced Settings": "詳細設定",
+        "Repeat Penalty:": "繰り返しペナルティ:",
         
         # モデルダウンロードダイアログ
         "Model Manager": "モデルマネージャー",
@@ -87,11 +92,36 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "No model found. Please download a model from Settings → Download Models.": "モデルが見つかりません。設定→モデルをダウンロードからモデルをダウンロードしてください。",
         "Model downloaded successfully!": "モデルのダウンロードが完了しました！",
         "Failed to download": "ダウンロードに失敗しました",
+        "Please select a valid model file!": "有効なモデルファイルを選択してください！",
+        "Model file found!": "モデルファイルが見つかりました！",
+        "API key is required for {}": "{}にはAPIキーが必要です",
+        "Testing {} connection...": "{}への接続をテスト中...",
+        "Model file does not exist!": "モデルファイルが存在しません！",
+        "LLM Busy": "LLM実行中",
+        "Please wait for the current generation to complete.": "現在の生成が完了するまでお待ちください。",
+        "Generating...": "生成中...",
         
         # スキルレベル
         "beginner": "初心者",
         "intermediate": "中級者",
         "advanced": "上級者",
+        
+        # カスタムプロンプトダイアログ
+        "Edit Custom System Prompt": "カスタムシステムプロンプトを編集",
+        "Enter your custom system prompt. This will be used to instruct the AI on how to respond.": "カスタムシステムプロンプトを入力してください。これはAIの応答方法を指示するために使用されます。",
+        "Tips": "ヒント",
+        "• Use {skill_level} to reference the user's skill level": "• {skill_level} でユーザーのスキルレベルを参照",
+        "• Use {language} to reference the output language": "• {language} で出力言語を参照",
+        "• Be specific about the coding style and explanation depth": "• コーディングスタイルと説明の深さを具体的に指定",
+        "• Include examples of how you want the AI to respond": "• AIにどのように応答してほしいかの例を含める",
+        "Presets:": "プリセット:",
+        "Educational": "教育用",
+        "Professional": "プロフェッショナル",
+        "Minimal": "最小限",
+        "Variables: {skill_level} = 'beginner/intermediate/advanced (with detailed description)', {language} = 'ja/en/zh-CN/zh-TW/auto'": "変数: {skill_level} = '初心者/中級者/上級者（詳細説明付き）', {language} = 'ja/en/zh-CN/zh-TW/auto'",
+        "Controls randomness: 0.0 = deterministic, 2.0 = very creative": "ランダム性を制御: 0.0 = 決定的, 2.0 = 非常に創造的",
+        "Maximum number of tokens the model can process at once": "モデルが一度に処理できる最大トークン数",
+        "Penalty for repeating tokens: 1.0 = no penalty, 2.0 = strong penalty": "トークン繰り返しのペナルティ: 1.0 = ペナルティなし, 2.0 = 強いペナルティ",
     },
     
     # 簡体字中国語
@@ -141,7 +171,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "Save": "保存",
         "Cancel": "取消",
         "Test Model": "测试模型",
+        "Test": "测试",
         "Download Models": "下载模型",
+        "Test Connection": "测试连接",
+        "Basic Settings": "基本设置",
+        "Advanced Settings": "高级设置",
+        "Repeat Penalty:": "重复惩罚:",
         
         # モデルダウンロードダイアログ
         "Model Manager": "模型管理器",
@@ -173,11 +208,36 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "No model found. Please download a model from Settings → Download Models.": "未找到模型。请从设置→下载模型中下载模型。",
         "Model downloaded successfully!": "模型下载成功！",
         "Failed to download": "下载失败",
+        "Please select a valid model file!": "请选择有效的模型文件！",
+        "Model file found!": "找到模型文件！",
+        "API key is required for {}": "{}需要API密钥",
+        "Testing {} connection...": "正在测试{}连接...",
+        "Model file does not exist!": "模型文件不存在！",
+        "LLM Busy": "LLM正在执行",
+        "Please wait for the current generation to complete.": "请等待当前生成完成。",
+        "Generating...": "正在生成...",
         
         # スキルレベル
         "beginner": "初学者",
         "intermediate": "中级",
         "advanced": "高级",
+        
+        # 自定义提示词对话框
+        "Edit Custom System Prompt": "编辑自定义系统提示",
+        "Enter your custom system prompt. This will be used to instruct the AI on how to respond.": "输入您的自定义系统提示。这将用于指导AI如何回应。",
+        "Tips": "提示",
+        "• Use {skill_level} to reference the user's skill level": "• 使用 {skill_level} 引用用户的技能水平",
+        "• Use {language} to reference the output language": "• 使用 {language} 引用输出语言",
+        "• Be specific about the coding style and explanation depth": "• 明确指定编码风格和解释深度",
+        "• Include examples of how you want the AI to respond": "• 包含您希望AI如何回应的示例",
+        "Presets:": "预设:",
+        "Educational": "教育用途",
+        "Professional": "专业",
+        "Minimal": "最小化",
+        "Variables: {skill_level} = 'beginner/intermediate/advanced (with detailed description)', {language} = 'ja/en/zh-CN/zh-TW/auto'": "变量: {skill_level} = '初学者/中级/高级（含详细描述）', {language} = 'ja/en/zh-CN/zh-TW/auto'",
+        "Controls randomness: 0.0 = deterministic, 2.0 = very creative": "控制随机性: 0.0 = 确定性, 2.0 = 非常有创意",
+        "Maximum number of tokens the model can process at once": "模型一次可以处理的最大令牌数",
+        "Penalty for repeating tokens: 1.0 = no penalty, 2.0 = strong penalty": "重复令牌的惩罚: 1.0 = 无惩罚, 2.0 = 强惩罚",
     },
     
     # 繁体字中国語
@@ -227,7 +287,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "Save": "儲存",
         "Cancel": "取消",
         "Test Model": "測試模型",
+        "Test": "測試",
         "Download Models": "下載模型",
+        "Test Connection": "測試連接",
+        "Basic Settings": "基本設定",
+        "Advanced Settings": "進階設定",
+        "Repeat Penalty:": "重複懲罰:",
         
         # モデルダウンロードダイアログ
         "Model Manager": "模型管理器",
@@ -259,11 +324,36 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "No model found. Please download a model from Settings → Download Models.": "未找到模型。請從設定→下載模型中下載模型。",
         "Model downloaded successfully!": "模型下載成功！",
         "Failed to download": "下載失敗",
+        "Please select a valid model file!": "請選擇有效的模型檔案！",
+        "Model file found!": "找到模型檔案！",
+        "API key is required for {}": "{}需要API金鑰",
+        "Testing {} connection...": "正在測試{}連接...",
+        "Model file does not exist!": "模型檔案不存在！",
+        "LLM Busy": "LLM正在執行",
+        "Please wait for the current generation to complete.": "請等待當前生成完成。",
+        "Generating...": "正在生成...",
         
         # スキルレベル
         "beginner": "初學者",
         "intermediate": "中級",
         "advanced": "高級",
+        
+        # 自訂提示詞對話框
+        "Edit Custom System Prompt": "編輯自訂系統提示",
+        "Enter your custom system prompt. This will be used to instruct the AI on how to respond.": "輸入您的自訂系統提示。這將用於指導AI如何回應。",
+        "Tips": "提示",
+        "• Use {skill_level} to reference the user's skill level": "• 使用 {skill_level} 引用使用者的技能水準",
+        "• Use {language} to reference the output language": "• 使用 {language} 引用輸出語言",
+        "• Be specific about the coding style and explanation depth": "• 明確指定程式碼風格和解釋深度",
+        "• Include examples of how you want the AI to respond": "• 包含您希望AI如何回應的範例",
+        "Presets:": "預設:",
+        "Educational": "教育用途",
+        "Professional": "專業",
+        "Minimal": "最小化",
+        "Variables: {skill_level} = 'beginner/intermediate/advanced (with detailed description)', {language} = 'ja/en/zh-CN/zh-TW/auto'": "變數: {skill_level} = '初學者/中級/高級（含詳細描述）', {language} = 'ja/en/zh-CN/zh-TW/auto'",
+        "Controls randomness: 0.0 = deterministic, 2.0 = very creative": "控制隨機性: 0.0 = 確定性, 2.0 = 非常有創意",
+        "Maximum number of tokens the model can process at once": "模型一次可以處理的最大令牌數",
+        "Penalty for repeating tokens: 1.0 = no penalty, 2.0 = strong penalty": "重複令牌的懲罰: 1.0 = 無懲罰, 2.0 = 強懲罰",
     }
 }
 

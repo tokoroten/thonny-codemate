@@ -158,3 +158,6 @@ Thumbs.db
 # uv
 .python-version
 uv.lock
+
+# Reference repositories (not part of this project)
+reference_repos/
