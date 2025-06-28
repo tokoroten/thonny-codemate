@@ -189,20 +189,40 @@ class SettingsDialog(tk.Toplevel):
         
         # ローカルモデル用
         self.local_model_frame = ttk.Frame(self.model_frame)
-        ttk.Label(self.local_model_frame, text=tr("Model:")).pack(side="left", padx=(0, 10))
+        
+        # 上部のパス入力部分
+        path_frame = ttk.Frame(self.local_model_frame)
+        path_frame.pack(fill="x")
+        
+        ttk.Label(path_frame, text=tr("Model:")).pack(side="left", padx=(0, 10))
         self.model_path_var = tk.StringVar()
         self.model_path_entry = ttk.Entry(
-            self.local_model_frame,
+            path_frame,
             textvariable=self.model_path_var,
             width=30
         )
         self.model_path_entry.pack(side="left", padx=(0, 5))
+        
+        # エントリーフィールドのツールチップ設定
+        self._create_dynamic_tooltip(self.model_path_entry)
         ttk.Button(
-            self.local_model_frame,
+            path_frame,
             text=tr("Browse..."),
             command=self._browse_model,
             width=12  # 幅を指定
         ).pack(side="left")
+        
+        # 下部のファイル名表示ラベル
+        self.model_filename_label = ttk.Label(
+            self.local_model_frame,
+            text="",
+            foreground="gray",
+            font=("", 9)
+        )
+        self.model_filename_label.pack(anchor="w", padx=(60, 0), pady=(2, 0))
+        
+        # パスが変更されたときにファイル名を更新
+        self.model_path_var.trace_add("write", self._update_model_filename_label)
         
         # 外部API用
         self.api_frame = ttk.Frame(self.model_frame)
@@ -759,6 +779,7 @@ class SettingsDialog(tk.Toplevel):
         # UI更新
         self._update_language_label()
         self._update_skill_label()
+        self._update_model_filename_label()
         self.temp_label.config(text=f"{self.temperature_var.get():.1f}")
         self.repeat_label.config(text=f"{self.repeat_penalty_var.get():.2f}")
     
@@ -882,6 +903,41 @@ class SettingsDialog(tk.Toplevel):
         except Exception as e:
             logger.error(f"Error updating Ollama models: {e}")
     
+    def _update_model_filename_label(self, *args):
+        """モデルファイル名ラベルを更新"""
+        try:
+            path = self.model_path_var.get().strip()
+            if path:
+                # パスからファイル名を抽出
+                filename = Path(path).name
+                # ファイルサイズも表示（存在する場合）
+                if Path(path).exists():
+                    size_bytes = Path(path).stat().st_size
+                    # サイズを人間が読みやすい形式に変換
+                    if size_bytes < 1024:
+                        size_str = f"{size_bytes} B"
+                    elif size_bytes < 1024 * 1024:
+                        size_str = f"{size_bytes / 1024:.1f} KB"
+                    elif size_bytes < 1024 * 1024 * 1024:
+                        size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+                    else:
+                        size_str = f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+                    
+                    self.model_filename_label.config(
+                        text=f"📄 {filename} ({size_str})",
+                        foreground="blue"
+                    )
+                else:
+                    self.model_filename_label.config(
+                        text=f"⚠️ {filename} " + tr("(File not found)"),
+                        foreground="red"
+                    )
+            else:
+                self.model_filename_label.config(text="", foreground="gray")
+        except Exception as e:
+            logger.error(f"Error updating filename label: {e}")
+            self.model_filename_label.config(text="", foreground="gray")
+    
     def _update_base_url_from_host_port(self, *args):
         """Host/PortからBase URLを更新"""
         try:
@@ -913,6 +969,28 @@ class SettingsDialog(tk.Toplevel):
             label = ttk.Label(tooltip, text=text, relief="solid", borderwidth=1)
             label.pack()
             widget.tooltip = tooltip
+        
+        def on_leave(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
+        
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
+    
+    def _create_dynamic_tooltip(self, widget):
+        """エントリーフィールドの内容を表示する動的ツールチップを作成"""
+        def on_enter(event):
+            # エントリーの内容を取得
+            if hasattr(widget, 'get'):
+                text = widget.get()
+                if text:
+                    tooltip = tk.Toplevel()
+                    tooltip.wm_overrideredirect(True)
+                    tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+                    label = ttk.Label(tooltip, text=text, relief="solid", borderwidth=1)
+                    label.pack()
+                    widget.tooltip = tooltip
         
         def on_leave(event):
             if hasattr(widget, 'tooltip'):

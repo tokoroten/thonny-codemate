@@ -109,6 +109,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "Server:": "サーバー:",
         "Host:": "ホスト:",
         "Port:": "ポート:",
+        "(File not found)": "(ファイルが見つかりません)",
         
         # スキルレベル
         "beginner": "初心者",
@@ -234,6 +235,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "Server:": "服务器:",
         "Host:": "主机:",
         "Port:": "端口:",
+        "(File not found)": "(文件未找到)",
         
         # スキルレベル
         "beginner": "初学者",
@@ -359,6 +361,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "Server:": "伺服器:",
         "Host:": "主機:",
         "Port:": "連接埠:",
+        "(File not found)": "(檔案未找到)",
         
         # スキルレベル
         "beginner": "初學者",
