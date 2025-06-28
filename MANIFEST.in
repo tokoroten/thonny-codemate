@@ -1,0 +1,13 @@
+include README.md
+include README.ja.md
+include LICENSE
+include pyproject.toml
+include CLAUDE.md
+recursive-include thonnycontrib *.py
+recursive-include docs_for_ai *.md
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * .DS_Store
+recursive-exclude models *
+recursive-exclude .venv *
+recursive-exclude tests *

@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A Thonny IDE plugin that integrates local LLM capabilities using llama-cpp-python"
 readme = "README.md"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "tokoroten", email = "shinta.nakayama@gmail.com"}
 ]
 license = {text = "MIT"}
 classifiers = [
