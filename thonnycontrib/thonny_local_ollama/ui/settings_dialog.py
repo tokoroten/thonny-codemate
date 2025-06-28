@@ -1,6 +1,6 @@
 """
 新しいデザインの設定ダイアログ
-重要度順に項目を配置し、折りたたみ可能なセクションを実装
+重要度順に項目を配置
 """
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -12,53 +12,6 @@ from thonny import get_workbench
 from ..i18n import tr
 
 logger = logging.getLogger(__name__)
-
-
-class CollapsibleFrame(ttk.Frame):
-    """折りたたみ可能なフレーム"""
-    
-    def __init__(self, parent, title, expanded=True):
-        super().__init__(parent)
-        
-        self.expanded = expanded
-        
-        # ヘッダーフレーム
-        self.header_frame = ttk.Frame(self)
-        self.header_frame.pack(fill="x", padx=5, pady=2)
-        
-        # 展開/折りたたみボタン
-        self.toggle_button = ttk.Label(
-            self.header_frame,
-            text="▼" if expanded else "▶",
-            cursor="hand2"
-        )
-        self.toggle_button.pack(side="left", padx=(0, 5))
-        self.toggle_button.bind("<Button-1>", self._toggle)
-        
-        # タイトル
-        self.title_label = ttk.Label(
-            self.header_frame,
-            text=tr(title) if title in ["Basic Settings", "Generation Settings", "Advanced Settings"] else title,
-            font=("", 10, "bold")
-        )
-        self.title_label.pack(side="left")
-        self.title_label.bind("<Button-1>", self._toggle)
-        
-        # コンテンツフレーム
-        self.content_frame = ttk.Frame(self)
-        if expanded:
-            self.content_frame.pack(fill="both", expand=True, padx=10, pady=5)
-    
-    def _toggle(self, event=None):
-        """展開/折りたたみを切り替え"""
-        self.expanded = not self.expanded
-        
-        if self.expanded:
-            self.toggle_button.config(text="▼")
-            self.content_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        else:
-            self.toggle_button.config(text="▶")
-            self.content_frame.pack_forget()
 
 
 class SettingsDialog(tk.Toplevel):
@@ -253,7 +206,7 @@ class SettingsDialog(tk.Toplevel):
         )
         self.ollama_host_entry.pack(side="left", padx=(0, 10))
         
-        # Port
+        # Port (デフォルトは11434だが、LM Studioの場合は1234)
         ttk.Label(self.ollama_server_frame, text=tr("Port:")).pack(side="left", padx=(0, 5))
         self.ollama_port_var = tk.StringVar(value="11434")
         self.ollama_port_entry = ttk.Entry(
@@ -262,6 +215,28 @@ class SettingsDialog(tk.Toplevel):
             width=8
         )
         self.ollama_port_entry.pack(side="left")
+        
+        # クイック設定ボタン
+        preset_frame = ttk.Frame(self.ollama_server_frame)
+        preset_frame.pack(side="left", padx=(10, 0))
+        
+        ttk.Label(preset_frame, text=tr("Presets:")).pack(side="left", padx=(0, 5))
+        
+        # Ollamaプリセットボタン
+        ttk.Button(
+            preset_frame,
+            text="Ollama",
+            command=lambda: self._set_ollama_defaults(),
+            width=8
+        ).pack(side="left", padx=(0, 5))
+        
+        # LM Studioプリセットボタン
+        ttk.Button(
+            preset_frame,
+            text="LM Studio",
+            command=lambda: self._set_lmstudio_defaults(),
+            width=8
+        ).pack(side="left")
         
         # Host/Port変更時にBase URLを更新
         self.ollama_host_var.trace_add("write", self._update_base_url_from_host_port)
@@ -334,15 +309,15 @@ class SettingsDialog(tk.Toplevel):
     
     def _create_generation_section(self):
         """生成設定セクション"""
-        # 生成設定（デフォルトで展開）
-        self.generation_section = CollapsibleFrame(
+        # 生成設定
+        generation_frame = ttk.LabelFrame(
             self.scrollable_frame,
-            tr("Generation Settings"),
-            expanded=True
+            text=tr("Generation Settings"),
+            padding="10"
         )
-        self.generation_section.pack(fill="x", padx=5, pady=5)
+        generation_frame.pack(fill="x", padx=5, pady=5)
         
-        gen_frame = self.generation_section.content_frame
+        gen_frame = generation_frame
         
         # Temperature
         temp_frame = ttk.Frame(gen_frame)
@@ -442,15 +417,15 @@ class SettingsDialog(tk.Toplevel):
     
     def _create_advanced_section(self):
         """詳細設定セクション"""
-        # 詳細設定（デフォルトで折りたたみ）
-        self.advanced_section = CollapsibleFrame(
+        # 詳細設定
+        advanced_frame = ttk.LabelFrame(
             self.scrollable_frame,
-            tr("Advanced Settings"),
-            expanded=False
+            text=tr("Advanced Settings"),
+            padding="10"
         )
-        self.advanced_section.pack(fill="x", padx=5, pady=5)
+        advanced_frame.pack(fill="x", padx=5, pady=5)
         
-        adv_frame = self.advanced_section.content_frame
+        adv_frame = advanced_frame
         
         # Base URL (内部用、非表示)
         self.base_url_var = tk.StringVar(value="http://localhost:11434")
@@ -902,6 +877,20 @@ class SettingsDialog(tk.Toplevel):
                 
         except Exception as e:
             logger.error(f"Error updating Ollama models: {e}")
+    
+    def _set_ollama_defaults(self):
+        """Ollamaのデフォルト設定を適用"""
+        self.ollama_host_var.set("localhost")
+        self.ollama_port_var.set("11434")
+        # モデルリストを再取得
+        self._fetch_ollama_models()
+    
+    def _set_lmstudio_defaults(self):
+        """LM Studioのデフォルト設定を適用"""
+        self.ollama_host_var.set("localhost")
+        self.ollama_port_var.set("1234")
+        # モデルリストを再取得
+        self._fetch_ollama_models()
     
     def _update_model_filename_label(self, *args):
         """モデルファイル名ラベルを更新"""

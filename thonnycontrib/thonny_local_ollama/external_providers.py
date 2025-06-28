@@ -135,12 +135,15 @@ class ChatGPTProvider(ExternalProvider):
 
 
 class OllamaProvider(ExternalProvider):
-    """Ollama APIプロバイダー"""
+    """Ollama/LM Studio APIプロバイダー"""
     
     def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3"):
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.headers = {"Content-Type": "application/json"}
+        
+        # LM Studioかどうかを判定（ポート1234の場合）
+        self.is_lmstudio = ":1234" in base_url
     
     def _build_prompt_from_messages(self, messages: list) -> str:
         """メッセージリストからOllama用のプロンプトを構築"""
@@ -163,90 +166,171 @@ class OllamaProvider(ExternalProvider):
         return "\n".join(prompt_parts)
     
     def generate(self, prompt: str, **kwargs) -> str:
-        """Ollama APIを使用してテキスト生成"""
-        # messagesパラメータがある場合は会話履歴を含める
-        messages = kwargs.get("messages", [])
-        if messages:
-            # システムメッセージとユーザーメッセージを含む完全なプロンプトを構築
-            full_prompt = self._build_prompt_from_messages(messages)
-        else:
-            full_prompt = prompt
+        """Ollama/LM Studio APIを使用してテキスト生成"""
+        if self.is_lmstudio:
+            # LM StudioはOpenAI互換API
+            messages = kwargs.get("messages", [])
+            if not messages:
+                messages = [{"role": "user", "content": prompt}]
             
-        data = {
-            "model": self.model,
-            "prompt": full_prompt,
-            "stream": False,
-            "options": {
+            data = {
+                "model": self.model,
+                "messages": messages,
                 "temperature": kwargs.get("temperature", 0.7),
-                "num_predict": kwargs.get("max_tokens", 2048),
+                "max_tokens": kwargs.get("max_tokens", 2048),
+                "stream": False
             }
-        }
-        
-        try:
-            req = urllib.request.Request(
-                f"{self.base_url}/api/generate",
-                data=json.dumps(data).encode('utf-8'),
-                headers=self.headers
-            )
             
-            with urllib.request.urlopen(req) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                return result['response']
+            try:
+                req = urllib.request.Request(
+                    f"{self.base_url}/v1/chat/completions",
+                    data=json.dumps(data).encode('utf-8'),
+                    headers=self.headers
+                )
                 
-        except Exception as e:
-            logger.error(f"Ollama request failed: {e}")
-            raise
+                with urllib.request.urlopen(req) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    return result['choices'][0]['message']['content']
+                    
+            except Exception as e:
+                logger.error(f"LM Studio request failed: {e}")
+                raise
+        else:
+            # Ollama API
+            # messagesパラメータがある場合は会話履歴を含める
+            messages = kwargs.get("messages", [])
+            if messages:
+                # システムメッセージとユーザーメッセージを含む完全なプロンプトを構築
+                full_prompt = self._build_prompt_from_messages(messages)
+            else:
+                full_prompt = prompt
+                
+            data = {
+                "model": self.model,
+                "prompt": full_prompt,
+                "stream": False,
+                "options": {
+                    "temperature": kwargs.get("temperature", 0.7),
+                    "num_predict": kwargs.get("max_tokens", 2048),
+                }
+            }
+            
+            try:
+                req = urllib.request.Request(
+                    f"{self.base_url}/api/generate",
+                    data=json.dumps(data).encode('utf-8'),
+                    headers=self.headers
+                )
+                
+                with urllib.request.urlopen(req) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    return result['response']
+                    
+            except Exception as e:
+                logger.error(f"Ollama request failed: {e}")
+                raise
     
     def generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
-        """Ollama APIを使用してストリーミング生成"""
-        # messagesパラメータがある場合は会話履歴を含める
-        messages = kwargs.get("messages", [])
-        if messages:
-            # システムメッセージとユーザーメッセージを含む完全なプロンプトを構築
-            full_prompt = self._build_prompt_from_messages(messages)
-        else:
-            full_prompt = prompt
+        """Ollama/LM Studio APIを使用してストリーミング生成"""
+        if self.is_lmstudio:
+            # LM StudioはOpenAI互換API
+            messages = kwargs.get("messages", [])
+            if not messages:
+                messages = [{"role": "user", "content": prompt}]
             
-        data = {
-            "model": self.model,
-            "prompt": full_prompt,
-            "stream": True,
-            "options": {
+            data = {
+                "model": self.model,
+                "messages": messages,
                 "temperature": kwargs.get("temperature", 0.7),
-                "num_predict": kwargs.get("max_tokens", 2048),
+                "max_tokens": kwargs.get("max_tokens", 2048),
+                "stream": True
             }
-        }
-        
-        try:
-            req = urllib.request.Request(
-                f"{self.base_url}/api/generate",
-                data=json.dumps(data).encode('utf-8'),
-                headers=self.headers
-            )
             
-            with urllib.request.urlopen(req) as response:
-                for line in response:
-                    try:
-                        data = json.loads(line.decode('utf-8'))
-                        if 'response' in data:
-                            yield data['response']
-                    except json.JSONDecodeError:
-                        continue
-                        
-        except Exception as e:
-            logger.error(f"Ollama streaming failed: {e}")
-            raise
+            try:
+                req = urllib.request.Request(
+                    f"{self.base_url}/v1/chat/completions",
+                    data=json.dumps(data).encode('utf-8'),
+                    headers=self.headers
+                )
+                
+                with urllib.request.urlopen(req) as response:
+                    for line in response:
+                        line = line.decode('utf-8').strip()
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                if 'choices' in data and len(data['choices']) > 0:
+                                    delta = data['choices'][0].get('delta', {})
+                                    if 'content' in delta:
+                                        yield delta['content']
+                            except json.JSONDecodeError:
+                                continue
+                                
+            except Exception as e:
+                logger.error(f"LM Studio streaming failed: {e}")
+                raise
+        else:
+            # Ollama API
+            # messagesパラメータがある場合は会話履歴を含める
+            messages = kwargs.get("messages", [])
+            if messages:
+                # システムメッセージとユーザーメッセージを含む完全なプロンプトを構築
+                full_prompt = self._build_prompt_from_messages(messages)
+            else:
+                full_prompt = prompt
+                
+            data = {
+                "model": self.model,
+                "prompt": full_prompt,
+                "stream": True,
+                "options": {
+                    "temperature": kwargs.get("temperature", 0.7),
+                    "num_predict": kwargs.get("max_tokens", 2048),
+                }
+            }
+            
+            try:
+                req = urllib.request.Request(
+                    f"{self.base_url}/api/generate",
+                    data=json.dumps(data).encode('utf-8'),
+                    headers=self.headers
+                )
+                
+                with urllib.request.urlopen(req) as response:
+                    for line in response:
+                        try:
+                            data = json.loads(line.decode('utf-8'))
+                            if 'response' in data:
+                                yield data['response']
+                        except json.JSONDecodeError:
+                            continue
+                            
+            except Exception as e:
+                logger.error(f"Ollama streaming failed: {e}")
+                raise
     
     def get_models(self) -> list[str]:
         """利用可能なモデルのリストを取得"""
         try:
-            req = urllib.request.Request(f"{self.base_url}/api/tags")
-            with urllib.request.urlopen(req, timeout=5) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                models = [m['name'] for m in data.get('models', [])]
-                return models
+            if self.is_lmstudio:
+                # LM StudioはOpenAI互換API
+                req = urllib.request.Request(f"{self.base_url}/v1/models")
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    models = [m['id'] for m in data.get('data', [])]
+                    return models
+            else:
+                # Ollama API
+                req = urllib.request.Request(f"{self.base_url}/api/tags")
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    models = [m['name'] for m in data.get('models', [])]
+                    return models
         except Exception as e:
-            logger.error(f"Failed to fetch Ollama models: {e}")
+            logger.error(f"Failed to fetch models: {e}")
             return []
     
     def test_connection(self) -> Dict[str, Any]:
