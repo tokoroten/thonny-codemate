@@ -176,7 +176,7 @@ class SettingsDialog(tk.Toplevel):
         self.provider_combo = ttk.Combobox(
             basic_frame,
             textvariable=self.provider_var,
-            values=["local", "chatgpt", "ollama", "openrouter"],
+            values=["local", "chatgpt", "ollama/lmstudio", "openrouter"],
             state="readonly",
             width=20
         )
@@ -219,7 +219,7 @@ class SettingsDialog(tk.Toplevel):
         )
         self.api_key_entry.pack(side="left")
         
-        # Ollama Server設定 (Basic Settingsに移動)
+        # Ollama/LM Studio Server設定 (Basic Settingsに移動)
         self.ollama_server_frame = ttk.Frame(self.api_frame)
         ttk.Label(self.ollama_server_frame, text=tr("Server:")).pack(side="left", padx=(0, 10))
         
@@ -470,6 +470,10 @@ class SettingsDialog(tk.Toplevel):
         """プロバイダー変更時の処理"""
         provider = self.provider_var.get()
         
+        # ollama/lmstudioの場合はollamaとして扱う
+        if provider == "ollama/lmstudio":
+            provider = "ollama"
+        
         # プロバイダー変更時に適切なAPIキーを読み込む
         if provider == "chatgpt":
             self.api_key_var.set(self.workbench.get_option("llm.chatgpt_api_key", ""))
@@ -592,6 +596,10 @@ class SettingsDialog(tk.Toplevel):
         """接続テスト"""
         provider = self.provider_var.get()
         
+        # ollama/lmstudioの場合はollamaとして扱う
+        if provider == "ollama/lmstudio":
+            provider = "ollama"
+        
         if provider == "local":
             model_path = self.model_path_var.get()
             if not model_path or not Path(model_path).exists():
@@ -648,22 +656,32 @@ class SettingsDialog(tk.Toplevel):
         self.test_connection_button.config(state="normal", text=tr("Test Connection"))
         
         if result["success"]:
+            # 表示用のプロバイダー名を取得
+            display_provider = result["provider"]
+            if display_provider == "Ollama":
+                display_provider = "Ollama/LM Studio"
+                
             if result["provider"] == "Ollama":
                 models = result.get("available_models", [])
                 model_info = f"\nModels: {len(models)}" if models else "\nNo models found"
                 messagebox.showinfo(
                     tr("Success"), 
-                    f"Connected to {result['provider']} successfully!{model_info}"
+                    f"Connected to {display_provider} successfully!{model_info}"
                 )
             else:
                 messagebox.showinfo(
                     tr("Success"), 
-                    f"Connected to {result['provider']} successfully!"
+                    f"Connected to {display_provider} successfully!"
                 )
         else:
+            # 表示用のプロバイダー名を取得
+            display_provider = result.get("provider", provider)
+            if display_provider == "Ollama":
+                display_provider = "Ollama/LM Studio"
+                
             messagebox.showerror(
                 tr("Error"), 
-                f"Failed to connect to {result['provider']}: {result.get('error', 'Unknown error')}"
+                f"Failed to connect to {display_provider}: {result.get('error', 'Unknown error')}"
             )
     
     def _edit_custom_prompt(self):
@@ -680,7 +698,11 @@ class SettingsDialog(tk.Toplevel):
     def _load_settings(self):
         """設定を読み込む"""
         # 基本設定
-        self.provider_var.set(self.workbench.get_option("llm.provider", "local"))
+        provider = self.workbench.get_option("llm.provider", "local")
+        # ollamaの場合は表示用にollama/lmstudioに変換
+        if provider == "ollama":
+            provider = "ollama/lmstudio"
+        self.provider_var.set(provider)
         self.model_path_var.set(self.workbench.get_option("llm.model_path", ""))
         self.output_language_var.set(self.workbench.get_option("llm.output_language", "auto"))
         self.skill_level_var.set(self.workbench.get_option("llm.skill_level", "beginner"))
@@ -745,6 +767,11 @@ class SettingsDialog(tk.Toplevel):
         # 検証
         provider = self.provider_var.get()
         
+        # 保存時はollama/lmstudioをollamaとして保存
+        save_provider = provider
+        if provider == "ollama/lmstudio":
+            save_provider = "ollama"
+        
         if provider == "local":
             model_path = self.model_path_var.get()
             if model_path and not Path(model_path).exists():
@@ -757,7 +784,7 @@ class SettingsDialog(tk.Toplevel):
                 return
         
         # 保存
-        self.workbench.set_option("llm.provider", provider)
+        self.workbench.set_option("llm.provider", save_provider)
         self.workbench.set_option("llm.model_path", self.model_path_var.get())
         self.workbench.set_option("llm.output_language", self.output_language_var.get())
         self.workbench.set_option("llm.skill_level", self.skill_level_var.get())
@@ -869,8 +896,8 @@ class SettingsDialog(tk.Toplevel):
     
     def _on_base_url_changed(self, *args):
         """Base URLが変更された時の処理"""
-        # Ollamaが選択されている場合のみ
-        if self.provider_var.get() == "ollama":
+        # Ollama/LM Studioが選択されている場合のみ
+        if self.provider_var.get() in ["ollama", "ollama/lmstudio"]:
             # タイマーをリセット（連続入力に対応）
             if hasattr(self, '_base_url_timer'):
                 self.after_cancel(self._base_url_timer)

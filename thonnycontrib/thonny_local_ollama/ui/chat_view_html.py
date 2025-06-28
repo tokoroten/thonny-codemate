@@ -508,13 +508,15 @@ class LLMChatViewHTML(ttk.Frame):
             else:
                 # 外部プロバイダーの場合
                 external_model = workbench.get_option("llm.external_model", "")
-                display_text = f"{external_model} ({provider})" if external_model else f"Using {provider}"
+                # 表示用のプロバイダー名
+                display_provider = "Ollama/LM Studio" if provider == "ollama" else provider
+                display_text = f"{external_model} ({display_provider})" if external_model else f"Using {display_provider}"
                 self.status_label.config(text=display_text, foreground="blue")
                 self.llm_client.get_config()
                 self.send_button.config(state=tk.NORMAL)
                 self._add_message(
                     "system",
-                    f"Connected to {provider.upper()} API. Ready to chat!"
+                    f"Connected to {display_provider.upper()} API. Ready to chat!"
                 )
         
         except Exception as e:
