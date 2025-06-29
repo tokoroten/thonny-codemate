@@ -366,11 +366,7 @@ class MarkdownRenderer:
             }}
         }}
     </style>
-    <script>
-        // Python APIの確認
-        console.log('pyInsertCode available:', typeof pyInsertCode !== 'undefined');
-        console.log('pyCopyCode available:', typeof pyCopyCode !== 'undefined');
-        
+    <script>        
         // コードをコピー
         function copyCode(blockId) {{
             var sourceElement = document.getElementById(blockId + '-source');
