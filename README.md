@@ -17,6 +17,10 @@ A Thonny IDE plugin that integrates local LLM capabilities using llama-cpp-pytho
 - 📋 **Interactive Code Blocks**: Copy and insert code blocks directly from chat
 - 🎨 **Markdown Rendering**: Optional rich text formatting with tkinterweb
 - 💾 **USB Portable**: Can be bundled with Thonny and models for portable use
+- 🛡️ **Error Resilience**: Advanced error handling with automatic retry and user-friendly messages
+- ⚡ **Performance Optimized**: Message virtualization and caching for handling large conversations
+- 🔧 **Smart Provider Detection**: Automatically detects Ollama vs LM Studio based on API responses
+- 🌐 **Multi-language Support**: Japanese, Chinese (Simplified/Traditional), and English UI
 
 ## Installation
 

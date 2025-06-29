@@ -4,6 +4,7 @@ GitHub Copilot風のローカルLLM統合を提供するThonnyプラグイン
 """
 import logging
 import sys
+import threading
 from typing import Optional
 from pathlib import Path
 from .i18n import tr
@@ -36,6 +37,7 @@ __version__ = "0.1.0"
 _plugin_loaded = False
 _llm_client: Optional['LLMClient'] = None
 _is_generating = False  # LLMが生成中かどうかのフラグ
+_generation_lock = threading.Lock()  # スレッドセーフティのためのロック
 
 
 def get_safe_logger(name: str) -> logging.Logger:
@@ -164,16 +166,18 @@ def is_llm_busy() -> bool:
     """
     LLMが現在生成中かどうかを確認
     """
-    global _is_generating
-    return _is_generating
+    global _is_generating, _generation_lock
+    with _generation_lock:
+        return _is_generating
 
 
 def set_llm_busy(busy: bool):
     """
     LLMの生成状態を設定
     """
-    global _is_generating
-    _is_generating = busy
+    global _is_generating, _generation_lock
+    with _generation_lock:
+        _is_generating = busy
 
 
 def explain_selection_handler():

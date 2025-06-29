@@ -9,6 +9,7 @@ import queue
 import logging
 import time
 import json
+import traceback
 from pathlib import Path
 from typing import Optional, List, Tuple
 
@@ -29,6 +30,24 @@ except ImportError:
 
 from .markdown_renderer import MarkdownRenderer
 from ..i18n import tr
+
+# パフォーマンスモニタリングを試す（オプショナル）
+try:
+    from ..performance_monitor import measure_performance, Timer
+except ImportError:
+    # パフォーマンスモニタリングが利用できない場合はダミー実装
+    def measure_performance(operation=None):
+        def decorator(func):
+            return func
+        return decorator
+    
+    class Timer:
+        def __init__(self, operation):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
 
 
 class LLMChatViewHTML(ttk.Frame):
@@ -52,10 +71,13 @@ class LLMChatViewHTML(ttk.Frame):
         # メッセージキュー（スレッド間通信用）
         self.message_queue = queue.Queue()
         self._processing = False
-        self._current_message = ""  # ストリーミング中のメッセージ
         self._stop_generation = False
         self._first_token_received = False  # 最初のトークンを受け取ったか
         self._generating_animation_id = None  # アニメーションのafter ID
+        
+        # スレッドセーフティのためのロック
+        self._message_lock = threading.Lock()
+        self._current_message = ""  # ストリーミング中のメッセージ（ロックで保護）
         
         # HTMLが完全に読み込まれたかを追跡
         self._html_ready = False
@@ -86,15 +108,13 @@ class LLMChatViewHTML(ttk.Frame):
         
         ttk.Label(
             frame,
-            text="tkinterweb is not installed",
+            text=tr("tkinterweb is not installed"),
             font=("", 12, "bold")
         ).pack(pady=10)
         
         ttk.Label(
             frame,
-            text="To enable Markdown rendering and interactive features,\n"
-                 "please install tkinterweb:\n\n"
-                 "pip install tkinterweb",
+            text=tr("To enable Markdown rendering and interactive features,\nplease install tkinterweb:\n\npip install tkinterweb"),
             justify=tk.CENTER
         ).pack(pady=10)
         
@@ -294,9 +314,9 @@ class LLMChatViewHTML(ttk.Frame):
                 text_widget = editor.get_text_widget()
                 text_widget.insert("insert", code)
                 text_widget.focus_set()
-                self._show_notification("Code inserted into editor!")
+                self._show_notification(tr("Code inserted into editor!"))
             else:
-                messagebox.showinfo("No Editor", "Please open a file in the editor first.")
+                messagebox.showinfo(tr("No Editor"), tr("Please open a file in the editor first."))
             
             # URLをリセットするため、空のページに戻す
             # HTMLの再読み込みは避ける（ボタンが使えなくなるため）
@@ -307,6 +327,7 @@ class LLMChatViewHTML(ttk.Frame):
         
         return True  # すべてのナビゲーションをキャンセル
     
+    @measure_performance("chat_view.update_html")
     def _update_html(self, full_reload=True):
         """HTMLコンテンツを更新"""
         if full_reload:
@@ -385,6 +406,7 @@ class LLMChatViewHTML(ttk.Frame):
             # エラーの場合はフォールバックとして完全更新
             self._update_html(full_reload=True)
     
+    @measure_performance("chat_view.append_message_js")
     def _append_message_js(self, sender: str, text: str):
         """JavaScriptで新しいメッセージを追加"""
         try:
@@ -431,6 +453,16 @@ class LLMChatViewHTML(ttk.Frame):
     
     def _check_html_ready(self):
         """HTMLの読み込み完了をチェック"""
+        # タイムアウト設定（10秒）
+        if not hasattr(self, '_html_ready_check_count'):
+            self._html_ready_check_count = 0
+        
+        self._html_ready_check_count += 1
+        if self._html_ready_check_count > 200:  # 50ms * 200 = 10秒
+            logger.warning("HTML ready check timeout - proceeding anyway")
+            self._html_ready = True
+            return
+        
         try:
             # JavaScriptでDOMの準備状態をチェック
             js_code = """
@@ -451,8 +483,9 @@ class LLMChatViewHTML(ttk.Frame):
                 self.after(50, self._check_html_ready)
         except Exception as e:
             logger.debug(f"HTML readiness check error: {e}")
-            # エラーの場合も再チェック
-            self.after(50, self._check_html_ready)
+            # エラーの場合も再チェック（タイムアウトまで）
+            if self._html_ready_check_count < 200:
+                self.after(50, self._check_html_ready)
     
     def _scroll_to_bottom(self):
         """HTMLフレームを最下部にスクロール"""
@@ -516,13 +549,20 @@ class LLMChatViewHTML(ttk.Frame):
                 self.send_button.config(state=tk.NORMAL)
                 self._add_message(
                     "system",
-                    f"Connected to {display_provider.upper()} API. Ready to chat!"
+                    tr("Connected to {} API. Ready to chat!").format(display_provider.upper())
                 )
         
         except Exception as e:
-            logger.error(f"Failed to initialize LLM client: {e}")
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"Failed to initialize LLM client: {e}\n{error_details}")
             self.status_label.config(text="Error loading model", foreground="red")
-            self._add_message("system", f"Failed to initialize LLM: {str(e)}")
+            # ユーザーフレンドリーなエラーメッセージ
+            if "import" in str(e).lower():
+                user_message = tr("LLM module not installed. Please install llama-cpp-python.")
+            else:
+                user_message = f"{tr('Failed to initialize LLM')}: {str(e)}"
+            self._add_message("system", user_message)
     
     def _on_model_loaded(self, success: bool, error: Optional[Exception]):
         """モデル読み込み完了時のコールバック"""
@@ -532,7 +572,7 @@ class LLMChatViewHTML(ttk.Frame):
                 model_name = Path(model_path).name if model_path else "Unknown"
                 self.status_label.config(text=f"{model_name} | {tr('Ready')}", foreground="green")
                 self.send_button.config(state=tk.NORMAL)
-                self._add_message("system", "LLM model loaded successfully!")
+                self._add_message("system", tr("LLM model loaded successfully!"))
             else:
                 self.status_label.config(text=tr("Load failed"), foreground="red")
                 self._add_message("system", f"{tr('Failed to load model:')} {error}")
@@ -541,7 +581,17 @@ class LLMChatViewHTML(ttk.Frame):
     
     def _add_message(self, sender: str, text: str):
         """メッセージを追加してHTMLを更新"""
+        # メッセージ履歴の上限を設定（メモリ使用量を制限）
+        MAX_MESSAGES = 200  # メモリ上の最大メッセージ数
+        
         self.messages.append((sender, text))
+        
+        # 古いメッセージを削除（最新のMAX_MESSAGES件のみ保持）
+        if len(self.messages) > MAX_MESSAGES:
+            # 最初の10%を削除してパフォーマンスを向上
+            remove_count = max(1, MAX_MESSAGES // 10)
+            self.messages = self.messages[remove_count:]
+            logger.debug(f"Trimmed {remove_count} old messages from memory")
         
         # JavaScriptで新しいメッセージを追加（全体再読み込みを避ける）
         self._append_message_js(sender, text)
@@ -619,7 +669,8 @@ class LLMChatViewHTML(ttk.Frame):
         
         # 処理中フラグ
         self._processing = True
-        self._current_message = ""
+        with self._message_lock:
+            self._current_message = ""
         self._stop_generation = False
         self._first_token_received = False
         self.send_button.config(text="Stop", state=tk.NORMAL)
@@ -766,8 +817,19 @@ Based on this context, {message}"""
             self.message_queue.put(("complete", None))
             
         except Exception as e:
-            logger.error(f"Error generating response: {e}")
-            self.message_queue.put(("error", str(e)))
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"Error generating response: {e}\n{error_details}")
+            # ユーザーフレンドリーなエラーメッセージ
+            if "connection" in str(e).lower():
+                user_message = tr("Connection error. Please check your network and API settings.")
+            elif "api key" in str(e).lower():
+                user_message = tr("API key error. Please check your API key in settings.")
+            elif "model" in str(e).lower():
+                user_message = tr("Model error. The selected model may not be available.")
+            else:
+                user_message = f"{tr('Error generating response')}: {str(e)}"
+            self.message_queue.put(("error", user_message))
     
     def _process_queue(self):
         """メッセージキューを処理"""
@@ -783,7 +845,8 @@ Based on this context, {message}"""
                         self._first_token_received = True
                         self._stop_generating_animation()
                     
-                    self._current_message += content
+                    with self._message_lock:
+                        self._current_message += content
                     update_needed = True
                 
                 elif msg_type == "complete":
@@ -791,18 +854,22 @@ Based on this context, {message}"""
                     self._stop_generating_animation()
                     
                     # 現在のメッセージがある場合、最終的に確定
-                    if self._current_message:
+                    with self._message_lock:
+                        current_msg = self._current_message
+                    
+                    if current_msg:
                         # ストリーミング中に既に追加されている場合は更新のみ
                         if self.messages and self.messages[-1][0] == "assistant":
                             # 最後のメッセージを現在のメッセージで確定
-                            self.messages[-1] = ("assistant", self._current_message)
+                            self.messages[-1] = ("assistant", current_msg)
                         else:
                             # アシスタントメッセージがない場合は新規追加
-                            self.messages.append(("assistant", self._current_message))
+                            self.messages.append(("assistant", current_msg))
                         
                         # 最終更新を即座に実行
                         self._update_html(full_reload=False)
-                        self._current_message = ""
+                        with self._message_lock:
+                            self._current_message = ""
                         
                         # 停止された場合のみ停止メッセージを追加
                         if self._stop_generation:
@@ -943,8 +1010,13 @@ Based on this context, {message}"""
             self._send_message()
             
         except Exception as e:
-            logger.error(f"Error in _explain_last_error: {e}")
-            messagebox.showerror("Error", f"Failed to get error information: {str(e)}")
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"Error in _explain_last_error: {e}\n{error_details}")
+            messagebox.showerror(
+                tr("Error"), 
+                f"{tr('Failed to get error information')}: {str(e)}"
+            )
     
     def _show_settings(self):
         """設定ダイアログを表示"""
@@ -959,7 +1031,8 @@ Based on this context, {message}"""
     def _clear_chat(self):
         """チャットをクリア"""
         self.messages.clear()
-        self._current_message = ""
+        with self._message_lock:
+            self._current_message = ""
         self._update_html(full_reload=True)  # クリア時は全体再読み込み
         # 履歴もクリア
         self._save_chat_history()
@@ -1040,6 +1113,9 @@ Based on this context, {message}"""
     def _update_animation(self):
         """アニメーションを更新"""
         try:
+            # アニメーションIDをクリア（多重登録を防ぐ）
+            self._generating_animation_id = None
+            
             if not self._processing or self._first_token_received:
                 return
             
@@ -1071,8 +1147,9 @@ Based on this context, {message}"""
                 except Exception as e:
                     logger.debug(f"Could not update animation: {e}")
             
-            # 500ms後に再度更新
-            self._generating_animation_id = self.after(500, self._update_animation)
+            # 500ms後に再度更新（処理中かつトークン未受信の場合のみ）
+            if self._processing and not self._first_token_received:
+                self._generating_animation_id = self.after(500, self._update_animation)
             
         except Exception as e:
             logger.error(f"Error updating animation: {e}")
@@ -1086,7 +1163,10 @@ Based on this context, {message}"""
                 self._generating_animation_id = None
             
             # アニメーションメッセージを削除（実際のコンテンツがまだない場合）
-            if self._current_message == "" and self.messages and self.messages[-1][0] == "assistant":
+            with self._message_lock:
+                current_msg = self._current_message
+            
+            if current_msg == "" and self.messages and self.messages[-1][0] == "assistant":
                 # 最後のメッセージがアニメーションメッセージの場合は削除
                 base_text = tr("Generating...").rstrip(".")
                 if self.messages[-1][1].startswith(base_text):

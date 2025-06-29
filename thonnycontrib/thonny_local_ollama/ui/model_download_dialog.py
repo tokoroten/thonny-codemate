@@ -17,7 +17,8 @@ class ModelDownloadDialog(tk.Toplevel):
         super().__init__(parent)
         
         self.title("Model Manager")
-        self.geometry("800x600")
+        self.geometry("700x600")
+        self.resizable(False, True)  # 横幅は固定、縦は可変
         
         self.model_manager = ModelManager()
         self.model_widgets = {}
@@ -31,6 +32,7 @@ class ModelDownloadDialog(tk.Toplevel):
         # メインフレーム
         main_frame = ttk.Frame(self, padding="10")
         main_frame.grid(row=0, column=0, sticky="nsew")
+        main_frame.columnconfigure(0, minsize=650)
         
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
@@ -41,7 +43,7 @@ class ModelDownloadDialog(tk.Toplevel):
         header_frame = ttk.Frame(main_frame)
         header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         
-        ttk.Label(header_frame, text="Recommended Models", font=("", 12, "bold")).pack(side=tk.LEFT)
+        ttk.Label(header_frame, text="Recommended Models", font=("", 12, "bold")).pack(side=tk.LEFT, padx=(10, 0))
         
         ttk.Button(
             header_frame,
@@ -51,13 +53,16 @@ class ModelDownloadDialog(tk.Toplevel):
         ).pack(side=tk.RIGHT, padx=5)
         
         # モデルリストフレーム（スクロール可能）
-        list_frame = ttk.Frame(main_frame)
-        list_frame.grid(row=1, column=0, sticky="nsew")
+        list_container = ttk.Frame(main_frame)
+        list_container.grid(row=1, column=0, sticky="nsew")
+        
+        list_frame = ttk.Frame(list_container, width=650)
+        list_frame.pack(fill="both", expand=True)
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
         
         # スクロールバー付きキャンバス
-        canvas = tk.Canvas(list_frame, highlightthickness=0)
+        canvas = tk.Canvas(list_frame, highlightthickness=0, width=630)
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
         self.scrollable_frame = ttk.Frame(canvas)
         
@@ -66,7 +71,7 @@ class ModelDownloadDialog(tk.Toplevel):
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
         
-        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw", width=630)
         canvas.configure(yscrollcommand=scrollbar.set)
         
         # マウスホイールのバインディング
@@ -116,13 +121,13 @@ class ModelDownloadDialog(tk.Toplevel):
             padding="10"
         )
         model_frame.grid(row=row, column=0, sticky="ew", pady=5, padx=5)
-        self.scrollable_frame.columnconfigure(0, weight=1)
+        self.scrollable_frame.columnconfigure(0, weight=1, minsize=620)
         
         # 説明
         desc_label = ttk.Label(
             model_frame,
             text=model["description"],
-            wraplength=400
+            wraplength=580
         )
         desc_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
         

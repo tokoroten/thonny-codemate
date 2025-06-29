@@ -21,7 +21,8 @@ class SettingsDialog(tk.Toplevel):
         super().__init__(parent)
         
         self.title(tr("LLM Assistant Settings"))
-        self.geometry("700x750")  # ウィンドウサイズを拡大
+        self.geometry("700x750")  # 固定サイズ
+        self.resizable(False, False)  # リサイズ無効化
         
         # モーダルダイアログ
         self.transient(parent)
@@ -34,7 +35,7 @@ class SettingsDialog(tk.Toplevel):
         main_container.pack(fill="both", expand=True)
         
         # スクロール可能な領域を作成
-        canvas = tk.Canvas(main_container, highlightthickness=0)
+        canvas = tk.Canvas(main_container, highlightthickness=0, width=680)
         scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
         self.scrollable_frame = ttk.Frame(canvas)
         
@@ -43,7 +44,8 @@ class SettingsDialog(tk.Toplevel):
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
         
-        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        # ウィンドウを作成時に幅を指定
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw", width=680)
         canvas.configure(yscrollcommand=scrollbar.set)
         
         # レイアウト
@@ -67,13 +69,6 @@ class SettingsDialog(tk.Toplevel):
         left_buttons = ttk.Frame(button_frame)
         left_buttons.pack(side="left")
         
-        ttk.Button(
-            left_buttons,
-            text=tr("Download Models"),
-            command=self._show_model_manager,
-            width=20,  # 幅を指定
-            style="Large.TButton"
-        ).pack(side="left", padx=(0, 8), ipady=5)  # ipadyで高さを増やす
         
         self.test_connection_button = ttk.Button(
             left_buttons,
@@ -87,6 +82,7 @@ class SettingsDialog(tk.Toplevel):
         # 右側のボタン
         right_buttons = ttk.Frame(button_frame)
         right_buttons.pack(side="right")
+        
         
         ttk.Button(
             right_buttons,
@@ -119,9 +115,13 @@ class SettingsDialog(tk.Toplevel):
         basic_frame = ttk.LabelFrame(
             self.scrollable_frame,
             text=tr("Basic Settings"),
-            padding="10"
+            padding="10",
+            width=650
         )
         basic_frame.pack(fill="x", padx=5, pady=5)
+        
+        # グリッドの重み設定（第1列を拡張可能に）
+        basic_frame.grid_columnconfigure(1, weight=1)
         
         # Provider
         ttk.Label(basic_frame, text=tr("Provider:")).grid(row=0, column=0, sticky="w", pady=5)
@@ -130,15 +130,19 @@ class SettingsDialog(tk.Toplevel):
             basic_frame,
             textvariable=self.provider_var,
             values=["local", "chatgpt", "ollama/lmstudio", "openrouter"],
-            state="readonly",
-            width=20
+            state="readonly"
         )
         self.provider_combo.grid(row=0, column=1, sticky="ew", pady=5)
         self.provider_combo.bind("<<ComboboxSelected>>", self._on_provider_changed)
         
         # Model/API Key（動的に切り替え）
-        self.model_frame = ttk.Frame(basic_frame)
-        self.model_frame.grid(row=1, column=0, columnspan=3, sticky="ew", pady=5)
+        # 固定サイズのコンテナフレームを作成
+        self.model_container = ttk.Frame(basic_frame)
+        self.model_container.grid(row=1, column=0, columnspan=3, sticky="ew", pady=5)
+        
+        # 実際のコンテンツフレーム
+        self.model_frame = ttk.Frame(self.model_container)
+        self.model_frame.pack(fill="both", expand=True)
         
         # ローカルモデル用
         self.local_model_frame = ttk.Frame(self.model_frame)
@@ -151,10 +155,9 @@ class SettingsDialog(tk.Toplevel):
         self.model_path_var = tk.StringVar()
         self.model_path_entry = ttk.Entry(
             path_frame,
-            textvariable=self.model_path_var,
-            width=30
+            textvariable=self.model_path_var
         )
-        self.model_path_entry.pack(side="left", padx=(0, 5))
+        self.model_path_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
         # エントリーフィールドのツールチップ設定
         self._create_dynamic_tooltip(self.model_path_entry)
@@ -177,6 +180,18 @@ class SettingsDialog(tk.Toplevel):
         # パスが変更されたときにファイル名を更新
         self.model_path_var.trace_add("write", self._update_model_filename_label)
         
+        # モデルダウンロードボタン（ローカルモデル用）
+        download_frame = ttk.Frame(self.local_model_frame)
+        download_frame.pack(fill="x", pady=(5, 0))
+        
+        self.download_models_button = ttk.Button(
+            download_frame,
+            text=tr("Download Models"),
+            command=self._show_model_manager,
+            width=15
+        )
+        self.download_models_button.pack(side="left", padx=(60, 0))
+        
         # 外部API用
         self.api_frame = ttk.Frame(self.model_frame)
         
@@ -187,10 +202,9 @@ class SettingsDialog(tk.Toplevel):
         self.api_key_entry = ttk.Entry(
             self.api_key_frame,
             textvariable=self.api_key_var,
-            show="*",
-            width=40
+            show="*"
         )
-        self.api_key_entry.pack(side="left")
+        self.api_key_entry.pack(side="left", fill="x", expand=True)
         
         # Ollama/LM Studio Server設定 (Basic Settingsに移動)
         self.ollama_server_frame = ttk.Frame(self.api_frame)
@@ -201,10 +215,9 @@ class SettingsDialog(tk.Toplevel):
         self.ollama_host_var = tk.StringVar(value="localhost")
         self.ollama_host_entry = ttk.Entry(
             self.ollama_server_frame,
-            textvariable=self.ollama_host_var,
-            width=15
+            textvariable=self.ollama_host_var
         )
-        self.ollama_host_entry.pack(side="left", padx=(0, 10))
+        self.ollama_host_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
         
         # Port (デフォルトは11434だが、LM Studioの場合は1234)
         ttk.Label(self.ollama_server_frame, text=tr("Port:")).pack(side="left", padx=(0, 5))
@@ -227,7 +240,7 @@ class SettingsDialog(tk.Toplevel):
             preset_frame,
             text="Ollama",
             command=lambda: self._set_ollama_defaults(),
-            width=8
+            width=10
         ).pack(side="left", padx=(0, 5))
         
         # LM Studioプリセットボタン
@@ -235,7 +248,7 @@ class SettingsDialog(tk.Toplevel):
             preset_frame,
             text="LM Studio",
             command=lambda: self._set_lmstudio_defaults(),
-            width=8
+            width=10
         ).pack(side="left")
         
         # Host/Port変更時にBase URLを更新
@@ -251,15 +264,13 @@ class SettingsDialog(tk.Toplevel):
         self.external_model_combo = ttk.Combobox(
             self.model_name_frame,
             textvariable=self.external_model_var,
-            state="readonly",
-            width=30
+            state="readonly"
         )
         
         # Ollama用エントリー（削除予定、互換性のために残す）
         self.external_model_entry = ttk.Entry(
             self.model_name_frame,
-            textvariable=self.external_model_var,
-            width=30
+            textvariable=self.external_model_var
         )
         
         # Ollama用リフレッシュボタン
@@ -277,8 +288,7 @@ class SettingsDialog(tk.Toplevel):
             basic_frame,
             textvariable=self.output_language_var,
             values=["auto", "ja", "en", "zh-CN", "zh-TW"],
-            state="readonly",
-            width=20
+            state="readonly"
         )
         self.language_combo.grid(row=2, column=1, sticky="ew", pady=5)
         
@@ -294,8 +304,7 @@ class SettingsDialog(tk.Toplevel):
             basic_frame,
             textvariable=self.skill_level_var,
             values=["beginner", "intermediate", "advanced"],
-            state="readonly",
-            width=20
+            state="readonly"
         )
         self.skill_combo.grid(row=3, column=1, sticky="ew", pady=5)
         
@@ -313,7 +322,8 @@ class SettingsDialog(tk.Toplevel):
         generation_frame = ttk.LabelFrame(
             self.scrollable_frame,
             text=tr("Generation Settings"),
-            padding="10"
+            padding="10",
+            width=650
         )
         generation_frame.pack(fill="x", padx=5, pady=5)
         
@@ -322,6 +332,10 @@ class SettingsDialog(tk.Toplevel):
         # Temperature
         temp_frame = ttk.Frame(gen_frame)
         temp_frame.pack(fill="x", pady=5)
+        
+        # Temperature行の要素が均等に配置されるようにスペーサーを追加
+        temp_spacer_frame = ttk.Frame(temp_frame)
+        temp_spacer_frame.pack(side="right", padx=(10, 0))
         
         temp_label = ttk.Label(temp_frame, text=tr("Temperature:"))
         temp_label.pack(side="left", padx=(0, 10))
@@ -336,10 +350,9 @@ class SettingsDialog(tk.Toplevel):
             from_=0.0,
             to=2.0,
             orient=tk.HORIZONTAL,
-            variable=self.temperature_var,
-            length=200
+            variable=self.temperature_var
         )
-        temp_scale.pack(side="left", padx=(0, 10))
+        temp_scale.pack(side="left", fill="x", expand=True, padx=(0, 10))
         
         self.temp_label = ttk.Label(temp_frame, text="0.7")
         self.temp_label.pack(side="left")
@@ -353,6 +366,12 @@ class SettingsDialog(tk.Toplevel):
         tokens_frame.pack(fill="x", pady=5)
         
         ttk.Label(tokens_frame, text=tr("Max Tokens:")).pack(side="left", padx=(0, 10))
+        
+        # Max Tokensの説明ツールチップ
+        tokens_help = ttk.Label(tokens_frame, text="(?)", foreground="blue", cursor="hand2")
+        tokens_help.pack(side="left", padx=(0, 10))
+        self._create_tooltip(tokens_help, tr("Maximum number of tokens the model will generate in one response"))
+        
         self.max_tokens_var = tk.IntVar()
         tokens_spinbox = ttk.Spinbox(
             tokens_frame,
@@ -390,6 +409,10 @@ class SettingsDialog(tk.Toplevel):
         repeat_frame = ttk.Frame(gen_frame)
         repeat_frame.pack(fill="x", pady=5)
         
+        # Repeat Penalty行の要素が均等に配置されるようにスペーサーを追加
+        repeat_spacer_frame = ttk.Frame(repeat_frame)
+        repeat_spacer_frame.pack(side="right", padx=(10, 0))
+        
         repeat_label = ttk.Label(repeat_frame, text=tr("Repeat Penalty:"))
         repeat_label.pack(side="left", padx=(0, 10))
         
@@ -403,10 +426,9 @@ class SettingsDialog(tk.Toplevel):
             from_=1.0,
             to=2.0,
             orient=tk.HORIZONTAL,
-            variable=self.repeat_penalty_var,
-            length=200
+            variable=self.repeat_penalty_var
         )
-        repeat_scale.pack(side="left", padx=(0, 10))
+        repeat_scale.pack(side="left", fill="x", expand=True, padx=(0, 10))
         
         self.repeat_label = ttk.Label(repeat_frame, text="1.1")
         self.repeat_label.pack(side="left")
@@ -421,7 +443,8 @@ class SettingsDialog(tk.Toplevel):
         advanced_frame = ttk.LabelFrame(
             self.scrollable_frame,
             text=tr("Advanced Settings"),
-            padding="10"
+            padding="10",
+            width=650
         )
         advanced_frame.pack(fill="x", padx=5, pady=5)
         
@@ -430,8 +453,7 @@ class SettingsDialog(tk.Toplevel):
         # Base URL (内部用、非表示)
         self.base_url_var = tk.StringVar(value="http://localhost:11434")
         
-        # Base URLが変更された時にOllamaのモデルを再取得
-        self.base_url_var.trace_add("write", self._on_base_url_changed)
+        # Base URLが変更された時の処理は削除（手動でRefreshボタンを押してもらう）
         
         # System Prompt Type
         prompt_frame = ttk.Frame(adv_frame)
@@ -498,7 +520,7 @@ class SettingsDialog(tk.Toplevel):
                 
                 # コンボボックスを表示
                 self.external_model_entry.pack_forget()
-                self.external_model_combo.pack(side="left")
+                self.external_model_combo.pack(side="left", fill="x", expand=True)
                 
                 # モデルリストを更新
                 if provider == "chatgpt":
@@ -525,18 +547,19 @@ class SettingsDialog(tk.Toplevel):
             
             elif provider == "ollama":
                 # サーバー設定を表示
-                self.ollama_server_frame.pack(fill="x", pady=2)
+                self.ollama_server_frame.pack(fill="both", expand=True, pady=2)
                 self.model_name_frame.pack(fill="x", pady=2)
                 
                 # Ollamaの場合もコンボボックスを使用
                 self.external_model_entry.pack_forget()
-                self.external_model_combo.pack(side="left")
+                self.external_model_combo.pack(side="left", fill="x", expand=True)
                 
                 # リフレッシュボタンを表示
                 self.refresh_ollama_button.pack(side="left", padx=(5, 0))
                 
-                # Ollamaからモデルを取得
-                self._fetch_ollama_models()
+                # 初回は手動でRefreshボタンを押してもらう
+                self.external_model_combo['values'] = []
+                self.external_model_var.set("")
     
     def _update_language_label(self, event=None):
         """言語ラベルを更新"""
@@ -635,11 +658,22 @@ class SettingsDialog(tk.Toplevel):
                     self.after(0, lambda: self._show_test_result(result))
                     
                 except Exception as e:
-                    logger.error(f"Test connection error: {e}")
+                    import traceback
+                    error_details = traceback.format_exc()
+                    logger.error(f"Test connection error: {e}\n{error_details}")
+                    
+                    # ユーザーフレンドリーなエラーメッセージ
+                    if "connection" in str(e).lower() or "urlopen" in str(e).lower():
+                        user_error = tr("Cannot connect to server. Please check if the service is running.")
+                    elif "api key" in str(e).lower() or "401" in str(e):
+                        user_error = tr("Invalid API key. Please check your API key.")
+                    else:
+                        user_error = str(e)
+                    
                     self.after(0, lambda: self._show_test_result({
                         "success": False,
                         "provider": provider,
-                        "error": str(e)
+                        "error": user_error
                     }))
             
             import threading
@@ -670,7 +704,7 @@ class SettingsDialog(tk.Toplevel):
                 )
         else:
             # 表示用のプロバイダー名を取得
-            display_provider = result.get("provider", provider)
+            display_provider = result.get("provider", "Unknown")
             if display_provider == "Ollama":
                 display_provider = "Ollama/LM Studio"
                 
@@ -721,27 +755,31 @@ class SettingsDialog(tk.Toplevel):
         base_url = self.workbench.get_option("llm.base_url", "http://localhost:11434")
         self.base_url_var.set(base_url)
         
-        # Base URLからHost/Portを抽出
+        # Base URLからHost/Portを抽出（urllib.parseを使用して安全に解析）
         try:
-            if base_url.startswith("http://"):
-                url_part = base_url[7:]  # "http://"を除去
-            elif base_url.startswith("https://"):
-                url_part = base_url[8:]  # "https://"を除去
-            else:
-                url_part = base_url
+            from urllib.parse import urlparse
             
-            if ":" in url_part:
-                host, port = url_part.split(":", 1)
-                # ポート番号の後にパスがある場合は除去
-                if "/" in port:
-                    port = port.split("/")[0]
-                self.ollama_host_var.set(host)
-                self.ollama_port_var.set(port)
+            parsed = urlparse(base_url)
+            
+            # ホスト名の取得
+            host = parsed.hostname or "localhost"
+            self.ollama_host_var.set(host)
+            
+            # ポート番号の取得
+            if parsed.port:
+                self.ollama_port_var.set(str(parsed.port))
             else:
-                self.ollama_host_var.set(url_part)
-                self.ollama_port_var.set("11434")
+                # デフォルトポート
+                if base_url.endswith(":1234") or ":1234/" in base_url:
+                    self.ollama_port_var.set("1234")
+                else:
+                    self.ollama_port_var.set("11434")
+                    
         except Exception as e:
-            logger.error(f"Error parsing base URL: {e}")
+            import traceback
+            logger.error(f"Error parsing base URL: {e}\n{traceback.format_exc()}")
+            logger.error(f"Failed to parse URL: {base_url}")
+            # フォールバック値
             self.ollama_host_var.set("localhost")
             self.ollama_port_var.set("11434")
         
@@ -827,8 +865,14 @@ class SettingsDialog(tk.Toplevel):
                     
                     # UIスレッドで更新
                     self.after(0, lambda: self._update_ollama_models(models, current_model))
+                except urllib.error.URLError as e:
+                    import traceback
+                    logger.error(f"Failed to connect to Ollama: {e}\n{traceback.format_exc()}")
+                    error_msg = tr("Cannot connect to server. Please check if Ollama/LM Studio is running.")
+                    self.after(0, lambda: self._update_ollama_models([], current_model, error=error_msg))
                 except Exception as e:
-                    logger.error(f"Failed to fetch Ollama models: {e}")
+                    import traceback
+                    logger.error(f"Failed to fetch Ollama models: {e}\n{traceback.format_exc()}")
                     self.after(0, lambda: self._update_ollama_models([], current_model, error=str(e)))
             
             import threading
@@ -836,7 +880,8 @@ class SettingsDialog(tk.Toplevel):
             thread.start()
             
         except Exception as e:
-            logger.error(f"Error in _fetch_ollama_models: {e}")
+            import traceback
+            logger.error(f"Error in _fetch_ollama_models: {e}\n{traceback.format_exc()}")
             messagebox.showerror(tr("Error"), tr("Failed to fetch models: {}").format(str(e)))
             self.refresh_ollama_button.config(state="normal", text=tr("Refresh"))
     
@@ -924,30 +969,42 @@ class SettingsDialog(tk.Toplevel):
             else:
                 self.model_filename_label.config(text="", foreground="gray")
         except Exception as e:
-            logger.error(f"Error updating filename label: {e}")
+            import traceback
+            logger.error(f"Error updating filename label: {e}\n{traceback.format_exc()}")
+            logger.error(f"Path that caused error: {self.model_path_var.get()}")
             self.model_filename_label.config(text="", foreground="gray")
     
     def _update_base_url_from_host_port(self, *args):
         """Host/PortからBase URLを更新"""
+        # 既に更新中の場合はスキップ（競合状態を防ぐ）
+        if hasattr(self, '_updating_base_url') and self._updating_base_url:
+            return
+        
+        self._updating_base_url = True
         try:
             host = self.ollama_host_var.get().strip()
             port = self.ollama_port_var.get().strip()
             
             if host and port:
                 # Base URLを構築
-                self.base_url_var.set(f"http://{host}:{port}")
+                new_url = f"http://{host}:{port}"
+                # 現在の値と異なる場合のみ更新
+                if self.base_url_var.get() != new_url:
+                    self.base_url_var.set(new_url)
         except Exception as e:
-            logger.error(f"Error updating base URL: {e}")
+            import traceback
+            logger.error(f"Error updating base URL: {e}\n{traceback.format_exc()}")
+            logger.error(f"Host: {self.ollama_host_var.get()}, Port: {self.ollama_port_var.get()}")
+        finally:
+            self._updating_base_url = False
     
     def _on_base_url_changed(self, *args):
         """Base URLが変更された時の処理"""
         # Ollama/LM Studioが選択されている場合のみ
         if self.provider_var.get() in ["ollama", "ollama/lmstudio"]:
-            # タイマーをリセット（連続入力に対応）
-            if hasattr(self, '_base_url_timer'):
-                self.after_cancel(self._base_url_timer)
-            # 500ms後にモデルを取得
-            self._base_url_timer = self.after(500, self._fetch_ollama_models)
+            # URLが変更されたらモデルリストをクリア
+            self.external_model_combo['values'] = []
+            self.external_model_var.set("")
     
     def _create_tooltip(self, widget, text):
         """ツールチップを作成"""
@@ -966,6 +1023,7 @@ class SettingsDialog(tk.Toplevel):
         
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
+    
     
     def _create_dynamic_tooltip(self, widget):
         """エントリーフィールドの内容を表示する動的ツールチップを作成"""

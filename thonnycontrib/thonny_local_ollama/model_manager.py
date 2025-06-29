@@ -72,6 +72,24 @@ RECOMMENDED_MODELS = {
         "description": "Qwen2.5 Coder 14B - プログラミングに特化した最新の高性能モデル。",
         "languages": ["en", "zh", "multi", "code"]
     },
+    # Gemma 3nモデルは現在llama-cpp-pythonが対応していないためコメントアウト
+    # llama-cpp-pythonが最新のllama.cppに追従したら有効化する
+    # "gemma-3n-e4b": {
+    #     "name": "gemma-3n-E4B-it-Q4_K_M.gguf",
+    #     "repo_id": "tripolskypetr/gemma-3n-e4b-it",
+    #     "filename": "gemma-3n-E4B-it-Q4_K_M.gguf",
+    #     "size": "4.2GB",
+    #     "description": "Gemma 3n E4B - Google DeepMindの最新軽量モデル。マルチモーダル対応。",
+    #     "languages": ["en", "multi"]
+    # },
+    # "gemma-3n-e2b": {
+    #     "name": "gemma-3n-E2B-it-Q4_K_M.gguf",
+    #     "repo_id": "tripolskypetr/gemma-3n-e2b-it",
+    #     "filename": "gemma-3n-E2B-it-Q4_K_M.gguf",
+    #     "size": "2.8GB",
+    #     "description": "Gemma 3n E2B - 小規模版の軽量モデル。低リソース環境に最適。",
+    #     "languages": ["en", "multi"]
+    # },
 }
 
 @dataclass

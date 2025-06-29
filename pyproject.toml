@@ -34,7 +34,7 @@ dependencies = [
     "pythonmonkey>=0.2.0",
     "markdown>=3.5",
     "pygments>=2.17",
-    "llama-cpp-python>=0.2.0",
+    "llama-cpp-python>=0.3.0",
 ]
 
 [project.optional-dependencies]
@@ -54,14 +54,17 @@ external-only = [
 ]
 dev = [
     "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10.0",
     "debugpy>=1.6",
     "black>=23.0",
     "ruff>=0.1.0",
-    "llama-cpp-python>=0.2.0",
+    "llama-cpp-python>=0.3.0",
 ]
 test = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pytest-mock>=3.10.0",
 ]
 
 [project.urls]
@@ -97,7 +100,7 @@ dev-dependencies = [
     "debugpy>=1.6",
     "black>=23.0",
     "ruff>=0.1.0",
-    "llama-cpp-python>=0.2.0",
+    "llama-cpp-python>=0.3.0",
 ]
 # llama-cpp-python用の追加インデックス
 extra-index-url = ["https://abetlen.github.io/llama-cpp-python/whl/cpu"]

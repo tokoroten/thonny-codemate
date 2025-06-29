@@ -7,6 +7,7 @@ import logging
 import threading
 import queue
 import platform
+import traceback
 from pathlib import Path
 from typing import Optional, Iterator, Dict, Any, List
 from dataclasses import dataclass
@@ -74,6 +75,7 @@ def detect_gpu_availability() -> int:
         
     except Exception as e:
         logger.debug(f"Error detecting GPU: {e}")
+        logger.debug(f"GPU detection stack trace:\n{traceback.format_exc()}")
     
     logger.info("No GPU detected, using CPU")
     return 0
@@ -470,8 +472,22 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
                 logger.info("Model loaded successfully")
                 return True
                 
+            except ImportError as e:
+                error_msg = f"Failed to import llama-cpp-python: {e}"
+                logger.error(error_msg)
+                logger.error(f"Import error stack trace:\n{traceback.format_exc()}")
+                self._load_error = e
+                return False
+            except FileNotFoundError as e:
+                error_msg = f"Model file not found at {config.model_path}: {e}"
+                logger.error(error_msg)
+                self._load_error = e
+                return False
             except Exception as e:
-                logger.error(f"Failed to load model: {e}")
+                error_msg = f"Failed to load model from {config.model_path}: {e}"
+                logger.error(error_msg)
+                logger.error(f"Model loading stack trace:\n{traceback.format_exc()}")
+                logger.error(f"Model config: n_ctx={config.n_ctx}, n_gpu_layers={n_gpu_layers}")
                 self._load_error = e
                 return False
             finally:

@@ -5,13 +5,49 @@ ChatGPT、Ollama API、OpenRouterに対応
 import os
 import json
 import logging
+import time
 from typing import Optional, Iterator, Dict, Any
 from abc import ABC, abstractmethod
 import urllib.request
 import urllib.error
 import ssl
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from ..utils.retry import retry_network_operation
+except ImportError:
+    # フォールバック: リトライなし
+    def retry_network_operation(func):
+        return func
 
 logger = logging.getLogger(__name__)
+
+
+def retry_on_network_error(max_attempts=3, delay=1.0, backoff=2.0):
+    """ネットワークエラー時にリトライするデコレーター"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            last_error = None
+            current_delay = delay
+            
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
+                    last_error = e
+                    if attempt < max_attempts - 1:
+                        logger.info(f"Network error, retrying in {current_delay}s: {e}")
+                        time.sleep(current_delay)
+                        current_delay *= backoff
+                    else:
+                        raise
+            
+            if last_error:
+                raise last_error
+        return wrapper
+    return decorator
 
 
 class ExternalProvider(ABC):
@@ -45,6 +81,7 @@ class ChatGPTProvider(ExternalProvider):
             "Content-Type": "application/json"
         }
     
+    @retry_on_network_error()
     def generate(self, prompt: str, **kwargs) -> str:
         """ChatGPT APIを使用してテキスト生成"""
         messages = kwargs.get("messages", [{"role": "user", "content": prompt}])
@@ -71,7 +108,16 @@ class ChatGPTProvider(ExternalProvider):
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8')
             logger.error(f"ChatGPT API error: {e.code} - {error_body}")
-            raise Exception(f"ChatGPT API error: {error_body}")
+            
+            # より詳細なエラーメッセージ
+            if e.code == 401:
+                raise Exception("Invalid API key. Please check your ChatGPT API key.")
+            elif e.code == 429:
+                raise Exception("Rate limit exceeded. Please try again later.")
+            elif e.code == 500:
+                raise Exception("ChatGPT server error. Please try again later.")
+            else:
+                raise Exception(f"ChatGPT API error ({e.code}): {error_body}")
         except Exception as e:
             logger.error(f"ChatGPT request failed: {e}")
             raise
@@ -111,12 +157,23 @@ class ChatGPTProvider(ExternalProvider):
                         except json.JSONDecodeError:
                             continue
                             
+        except urllib.error.HTTPError as e:
+            import traceback
+            logger.error(f"ChatGPT streaming HTTP error: {e}\n{traceback.format_exc()}")
+            if e.code == 401:
+                yield "[Error: Invalid API key]"
+            else:
+                yield f"[Error: HTTP {e.code}]"
+            return
         except Exception as e:
-            logger.error(f"ChatGPT streaming failed: {e}")
-            raise
+            import traceback
+            logger.error(f"ChatGPT streaming failed: {e}\n{traceback.format_exc()}")
+            yield f"[Error: {str(e)}]"
+            return
     
+    @retry_network_operation
     def test_connection(self) -> Dict[str, Any]:
-        """接続テスト"""
+        """接続テスト（リトライ付き）"""
         try:
             response = self.generate("Say 'Hello!' in exactly one word.", max_tokens=10)
             return {
@@ -142,8 +199,44 @@ class OllamaProvider(ExternalProvider):
         self.model = model
         self.headers = {"Content-Type": "application/json"}
         
-        # LM Studioかどうかを判定（ポート1234の場合）
-        self.is_lmstudio = ":1234" in base_url
+        # LM Studioかどうかを判定（まずポート番号でヒント、後で確認）
+        self._port_suggests_lmstudio = ":1234" in base_url
+        self.is_lmstudio = None  # 実際の判定は遅延評価
+    
+    def _detect_server_type(self):
+        """サーバータイプを検出（Ollama or LM Studio）"""
+        if self.is_lmstudio is not None:
+            return self.is_lmstudio
+        
+        # ポート番号からの初期推測を使用
+        if self._port_suggests_lmstudio:
+            # LM Studioの可能性が高い場合、OpenAI互換APIをチェック
+            try:
+                req = urllib.request.Request(f"{self.base_url}/v1/models")
+                with urllib.request.urlopen(req, timeout=1) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    if 'data' in data:  # OpenAI互換レスポンス
+                        self.is_lmstudio = True
+                        logger.debug("Detected LM Studio server")
+                        return True
+            except:
+                pass
+        
+        # Ollama APIをチェック
+        try:
+            req = urllib.request.Request(f"{self.base_url}/api/tags")
+            with urllib.request.urlopen(req, timeout=1) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                if 'models' in data:  # Ollamaレスポンス
+                    self.is_lmstudio = False
+                    logger.debug("Detected Ollama server")
+                    return False
+        except:
+            pass
+        
+        # デフォルトはポート番号からの推測を使用
+        self.is_lmstudio = self._port_suggests_lmstudio
+        return self.is_lmstudio
     
     def _build_prompt_from_messages(self, messages: list) -> str:
         """メッセージリストからOllama用のプロンプトを構築"""
@@ -167,7 +260,7 @@ class OllamaProvider(ExternalProvider):
     
     def generate(self, prompt: str, **kwargs) -> str:
         """Ollama/LM Studio APIを使用してテキスト生成"""
-        if self.is_lmstudio:
+        if self._detect_server_type():
             # LM StudioはOpenAI互換API
             messages = kwargs.get("messages", [])
             if not messages:
@@ -232,7 +325,7 @@ class OllamaProvider(ExternalProvider):
     
     def generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
         """Ollama/LM Studio APIを使用してストリーミング生成"""
-        if self.is_lmstudio:
+        if self._detect_server_type():
             # LM StudioはOpenAI互換API
             messages = kwargs.get("messages", [])
             if not messages:
@@ -312,10 +405,11 @@ class OllamaProvider(ExternalProvider):
                 logger.error(f"Ollama streaming failed: {e}")
                 raise
     
+    @retry_network_operation
     def get_models(self) -> list[str]:
-        """利用可能なモデルのリストを取得"""
+        """利用可能なモデルのリストを取得（リトライ付き）"""
         try:
-            if self.is_lmstudio:
+            if self._detect_server_type():
                 # LM StudioはOpenAI互換API
                 req = urllib.request.Request(f"{self.base_url}/v1/models")
                 with urllib.request.urlopen(req, timeout=5) as response:
