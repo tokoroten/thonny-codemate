@@ -1,8 +1,4 @@
 #!/bin/bash
-# uvを使ってThonnyを起動する簡易スクリプト
-
-# プロジェクトルートをPYTHONPATHに追加
-export PYTHONPATH="$(pwd):$PYTHONPATH"
-
-# uvでThonnyを実行
-uv run thonny
+# Run Thonny with the virtual environment
+export UV_LINK_MODE=copy
+.venv/bin/python -m thonny "$@"

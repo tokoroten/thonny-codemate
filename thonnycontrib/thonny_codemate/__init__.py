@@ -75,9 +75,15 @@ def load_plugin():
     """
     global _plugin_loaded, _llm_client
     
+    # デバッグ: プラグインロードの開始を表示
+    print("=" * 60)
+    print("Thonny Codemate Plugin: load_plugin() called")
+    print("=" * 60)
+    
     if _plugin_loaded:
         try:
             logger.warning("Plugin already loaded, skipping initialization")
+            print("WARNING: Plugin already loaded, skipping initialization")
         except Exception:
             pass
         return
@@ -85,6 +91,7 @@ def load_plugin():
     try:
         from thonny import get_workbench
         workbench = get_workbench()
+        print(f"✓ Got workbench: {workbench}")
         
         try:
             logger.info("Loading Thonny Local LLM Plugin...")
@@ -95,6 +102,7 @@ def load_plugin():
         # UIコンポーネントを登録（常にHTMLビューを使用）
         try:
             from .ui.chat_view_html import LLMChatViewHTML
+            print("✓ Successfully imported LLMChatViewHTML")
             workbench.add_view(
                 LLMChatViewHTML,
                 "LLM Assistant",
@@ -102,15 +110,19 @@ def load_plugin():
                 visible_by_default=False,
                 default_position_key="e"
             )
-        except ImportError as e:
-            logger.warning(f"Could not import chat view: {e}")
+            print("✓ LLM Assistant view registered successfully")
+        except Exception as e:
+            logger.error(f"Failed to register chat view: {e}", exc_info=True)
+            print(f"✗ Failed to register chat view: {e}")
+            import traceback
+            traceback.print_exc()
         
         # メニューコマンドを追加
         workbench.add_command(
             command_id="show_llm_assistant",
             menu_name="tools",
             command_label=tr("Show LLM Assistant"),
-            handler=lambda: workbench.show_view("LLMChatViewHTML"),
+            handler=lambda: workbench.show_view("LLMChatViewHTML"),  # クラス名を使用
             group=150
         )
         
@@ -149,6 +161,11 @@ def load_plugin():
             logger.info("Thonny Local LLM Plugin loaded successfully!")
         except Exception:
             pass
+        
+        print("=" * 60)
+        print("✓ Thonny Codemate Plugin loaded successfully!")
+        print("✓ LLM Assistant is available in Tools menu")
+        print("=" * 60)
         
     except Exception as e:
         try:
@@ -217,9 +234,8 @@ def explain_selection_handler():
         # 選択テキストを取得
         selected_text = text_widget.get("sel.first", "sel.last")
         
-        # チャットビューを表示
-        use_html_view = workbench.get_option("llm.use_html_view", True)
-        view_name = "LLMChatViewHTML" if use_html_view else "LLMChatView"
+        # チャットビューを表示（クラス名を使用）
+        view_name = "LLMChatViewHTML"
         workbench.show_view(view_name)
         
         # チャットビューに説明リクエストを送信
@@ -227,7 +243,7 @@ def explain_selection_handler():
         if chat_view and hasattr(chat_view, 'explain_code'):
             chat_view.explain_code(selected_text)
         else:
-            logger.error("Chat view not found or doesn't have explain_code method")
+            logger.error(f"Chat view not found or doesn't have explain_code method: {type(chat_view)}")
             
     except Exception as e:
         logger.error(f"Error in explain_selection_handler: {e}", exc_info=True)

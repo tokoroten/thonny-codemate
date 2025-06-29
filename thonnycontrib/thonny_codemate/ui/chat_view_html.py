@@ -593,26 +593,34 @@ class LLMChatViewHTML(ttk.Frame):
             self.messages = self.messages[remove_count:]
             logger.debug(f"Trimmed {remove_count} old messages from memory")
         
-        # JavaScriptで新しいメッセージを追加（全体再読み込みを避ける）
-        self._append_message_js(sender, text)
-        
-        # メッセージ追加後にスクロール
-        self._scroll_to_bottom()
+        # HTMLが準備できているかチェックしてメッセージを追加
+        if self._html_ready:
+            # JavaScriptで新しいメッセージを追加（全体再読み込みを避ける）
+            self._append_message_js(sender, text)
+            # メッセージ追加後にスクロール
+            self._scroll_to_bottom()
+        else:
+            # HTMLが準備できていない場合は、準備完了を待ってから追加
+            self._add_message_when_ready(sender, text)
         
         # ユーザーとアシスタントのメッセージのみ保存（システムメッセージは一時的なものが多いため）
         if sender in ["user", "assistant"]:
             self._save_chat_history()
     
-    def _add_message_when_ready(self, sender: str, text: str):
-        """HTMLが準備できたらメッセージを追加"""
+    def _add_message_when_ready(self, sender: str, text: str, retry_count=0):
+        """HTMLが準備できたらメッセージを追加（既にメッセージリストには追加済み）"""
         if self._html_ready:
             # JavaScriptで新しいメッセージを追加
             self._append_message_js(sender, text)
             # スクロール
             self._scroll_to_bottom()
         else:
-            # まだ準備ができていない場合は再試行
-            self.after(50, lambda: self._add_message_when_ready(sender, text))
+            # まだ準備ができていない場合は再試行（最大100回）
+            if retry_count < 100:
+                self.after(50, lambda: self._add_message_when_ready(sender, text, retry_count + 1))
+            else:
+                # タイムアウト時は全体を再読み込み
+                self._update_html(full_reload=True)
     
     def _handle_send_button(self):
         """送信/停止ボタンのハンドラー"""

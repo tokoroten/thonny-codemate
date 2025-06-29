@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "thonny-local-ollama"
+name = "thonny-codemate"
 version = "0.1.0"
-description = "A Thonny IDE plugin that integrates local LLM capabilities using llama-cpp-python"
+description = "A Thonny IDE plugin that provides AI-powered coding assistance using local and cloud LLMs"
 readme = "README.md"
 authors = [
     {name = "tokoroten", email = "shinta.nakayama@gmail.com"}
@@ -41,12 +41,12 @@ dependencies = [
 # CUDA版（NVIDIA GPU）
 cuda = [
     # Note: This will reinstall llama-cpp-python with CUDA support
-    # Users should run: pip install thonny-local-ollama[cuda] --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+    # Users should run: pip install thonny-codemate[cuda] --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
 ]
 # Metal版（macOS GPU）  
 metal = [
     # Note: This will reinstall llama-cpp-python with Metal support
-    # Users on macOS should run: CMAKE_ARGS="-DLLAMA_METAL=on" pip install thonny-local-ollama[metal]
+    # Users on macOS should run: CMAKE_ARGS="-DLLAMA_METAL=on" pip install thonny-codemate[metal]
 ]
 # 外部APIのみを使用する場合（llama-cpp-python不要）
 external-only = [
@@ -68,9 +68,9 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/tokoroten/thonny_local_ollama"
-Repository = "https://github.com/tokoroten/thonny_local_ollama"
-Issues = "https://github.com/tokoroten/thonny_local_ollama/issues"
+Homepage = "https://github.com/tokoroten/thonny_codemate"
+Repository = "https://github.com/tokoroten/thonny_codemate"
+Issues = "https://github.com/tokoroten/thonny_codemate/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
