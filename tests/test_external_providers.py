@@ -16,7 +16,12 @@ class TestChatGPTProvider(unittest.TestCase):
     """ChatGPTプロバイダーのテスト"""
     
     def setUp(self):
-        self.provider = ChatGPTProvider("test-api-key", "gpt-3.5-turbo")
+        # OpenAIがない場合でもテストできるようにモック
+        with patch('thonnycontrib.thonny_codemate.external_providers.OPENAI_AVAILABLE', True):
+            with patch('thonnycontrib.thonny_codemate.external_providers.OpenAI') as mock_openai_class:
+                mock_client = MagicMock()
+                mock_openai_class.return_value = mock_client
+                self.provider = ChatGPTProvider("test-api-key", "gpt-3.5-turbo")
     
     @patch('urllib.request.urlopen')
     def test_generate(self, mock_urlopen):
@@ -76,7 +81,12 @@ class TestOllamaProvider(unittest.TestCase):
     """Ollamaプロバイダーのテスト"""
     
     def setUp(self):
-        self.provider = OllamaProvider("http://localhost:11434", "llama3")
+        # OpenAIがない場合でもテストできるようにモック
+        with patch('thonnycontrib.thonny_codemate.external_providers.OPENAI_AVAILABLE', True):
+            with patch('thonnycontrib.thonny_codemate.external_providers.OpenAI') as mock_openai_class:
+                mock_client = MagicMock()
+                mock_openai_class.return_value = mock_client
+                self.provider = OllamaProvider("http://localhost:11434", "llama3")
     
     def test_generate(self):
         """通常の生成をテスト"""
@@ -151,7 +161,14 @@ class TestOpenRouterProvider(unittest.TestCase):
     """OpenRouterプロバイダーのテスト"""
     
     def setUp(self):
-        self.provider = OpenRouterProvider("test-api-key")
+        # OpenAIがない場合でもテストできるようにモック
+        with patch('thonnycontrib.thonny_codemate.external_providers.OPENAI_AVAILABLE', True):
+            with patch('thonnycontrib.thonny_codemate.external_providers.OpenAI') as mock_openai_class:
+                # DefaultHttpxClientもモック
+                with patch('thonnycontrib.thonny_codemate.external_providers.DefaultHttpxClient', MagicMock()):
+                    mock_client = MagicMock()
+                    mock_openai_class.return_value = mock_client
+                    self.provider = OpenRouterProvider("test-api-key")
     
     @patch('urllib.request.urlopen')
     def test_generate(self, mock_urlopen):
