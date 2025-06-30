@@ -788,6 +788,8 @@ class SettingsDialog(tk.Toplevel):
     
     def _save_settings(self):
         """設定を保存"""
+        from ..utils.constants import ProviderConstants
+        
         # 検証
         provider = self.provider_var.get()
         
