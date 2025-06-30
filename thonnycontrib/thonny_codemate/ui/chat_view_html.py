@@ -681,14 +681,12 @@ class LLMChatViewHTML(ttk.Frame):
             # 選択範囲がある場合
             start_line = int(text_widget.index("sel.first").split(".")[0])
             end_line = int(text_widget.index("sel.last").split(".")[0])
-            file_name = Path(current_file).name if current_file else "Unknown"
+            file_name = Path(current_file).name if current_file else "Untitled"
             return f"Context: {file_name} (lines {start_line}-{end_line})"
-        elif current_file:
-            # ファイル全体の場合
-            file_name = Path(current_file).name
+        else:
+            # ファイル全体の場合（未保存ファイルも含む）
+            file_name = Path(current_file).name if current_file else "Untitled"
             return f"Context: {file_name} (entire file)"
-        
-        return None
     
     def _format_display_message(self, message: str, context_info: Optional[str]) -> str:
         """表示用メッセージをフォーマット"""
@@ -834,10 +832,8 @@ Based on this context, {message}"""
             return self._format_selected_context(current_file, text_widget, selected_text)
         
         # 選択範囲がない場合はファイル全体
-        if current_file:
-            return self._format_full_file_context(current_file, text_widget)
-        
-        return None
+        # current_fileがなくても（未保存ファイル）エディタから内容を取得
+        return self._format_full_file_context(current_file, text_widget)
     
     def _get_selected_text(self, text_widget) -> Optional[str]:
         """選択されたテキストを取得"""
@@ -852,7 +848,7 @@ Based on this context, {message}"""
         selection_info = f"Selected lines: {start_line}-{end_line}"
         
         lang = self._detect_language(current_file)
-        file_name = Path(current_file).name if current_file else 'Unknown'
+        file_name = Path(current_file).name if current_file else 'Untitled'
         
         return f"""File: {file_name}
 {selection_info}
@@ -868,7 +864,7 @@ Based on this context, {message}"""
             return None
         
         lang = self._detect_language(current_file)
-        file_name = Path(current_file).name
+        file_name = Path(current_file).name if current_file else 'Untitled'
         
         return f"""File: {file_name}
 Full file content:

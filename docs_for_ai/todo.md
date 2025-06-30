@@ -37,7 +37,7 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 - [x] Add user skill level selection feature (2025-06-24完了)
 - [x] Implement multi-file context understanding (2025-06-25完了)
 - [x] Add support for external APIs (ChatGPT/Ollama/OpenRouter) (2025-06-25完了)
-- [x] Prepare PyPI package and publish (2025-06-30完了)
+- [x] Prepare PyPI package and publish (2025-06-30完了) - v0.1.3 released to PyPI
 - [ ] Implement inline code completion (cursor position)
 - [ ] Create USB portable deployment configuration
 
