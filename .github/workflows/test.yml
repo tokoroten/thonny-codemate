@@ -30,8 +30,8 @@ jobs:
     
     - name: Run tests
       run: |
-        pytest -v --cov=thonnycontrib.thonny_local_ollama
+        pytest -v --cov=thonnycontrib.thonny_codemate
     
     - name: Check package installation
       run: |
-        python -c "import thonnycontrib.thonny_local_ollama; print('Import successful')"
+        python -c "import thonnycontrib.thonny_codemate; print('Import successful')"

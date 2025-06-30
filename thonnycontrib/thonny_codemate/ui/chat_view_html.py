@@ -145,7 +145,15 @@ class LLMChatViewHTML(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         
-        # ヘッダー
+        # 各UI要素を作成
+        self._create_header_frame()
+        self._create_html_frame()
+        self._create_streaming_frame()
+        self._create_input_frame()
+        self._setup_key_bindings()
+    
+    def _create_header_frame(self):
+        """ヘッダーフレームを作成"""
         header_frame = ttk.Frame(self)
         header_frame.grid(row=0, column=0, sticky="ew", padx=3, pady=2)
         
@@ -175,11 +183,11 @@ class LLMChatViewHTML(ttk.Frame):
         
         self.status_label = ttk.Label(status_frame, text=tr("No model loaded"), foreground="gray")
         self.status_label.pack(side=tk.RIGHT)
-        
-        # HTMLフレーム（JavaScriptを有効化）
+    
+    def _create_html_frame(self):
+        """HTMLフレームを作成"""
         self.html_frame = HtmlFrame(self, messages_enabled=False, javascript_enabled=True)
         self.html_frame.grid(row=1, column=0, sticky="nsew", padx=3, pady=2)
-        
         
         # URL変更のハンドラーを設定（Insert機能用）
         self.html_frame.on_url_change = self._handle_url_change
@@ -193,8 +201,9 @@ class LLMChatViewHTML(ttk.Frame):
         # 初期状態では空のHTMLなのですぐに準備完了とみなす
         if not self.messages:
             self._html_ready = True
-        
-        # ストリーミング表示エリア（HTMLビューと入力エリアの間）
+    
+    def _create_streaming_frame(self):
+        """ストリーミング表示エリアを作成"""
         self.streaming_frame = ttk.LabelFrame(self, text=tr("Generating..."), padding=5)
         # 初期状態では非表示
         
@@ -212,8 +221,9 @@ class LLMChatViewHTML(ttk.Frame):
         )
         self.streaming_text.pack(fill=tk.BOTH, expand=True)
         self.streaming_text.config(state=tk.DISABLED)  # 読み取り専用
-        
-        # 入力エリア
+    
+    def _create_input_frame(self):
+        """入力エリアを作成"""
         input_frame = ttk.Frame(self)
         input_frame.grid(row=3, column=0, sticky="ew", padx=3, pady=2)
         input_frame.columnconfigure(0, weight=1)
@@ -231,6 +241,13 @@ class LLMChatViewHTML(ttk.Frame):
         button_frame = ttk.Frame(input_frame)
         button_frame.grid(row=1, column=0, sticky="ew")
         
+        self._create_buttons(button_frame)
+        
+        # コンテキストマネージャー
+        self.context_manager = None
+    
+    def _create_buttons(self, button_frame):
+        """ボタン類を作成"""
         # Sendボタン
         self.send_button = ttk.Button(
             button_frame,
@@ -266,11 +283,9 @@ class LLMChatViewHTML(ttk.Frame):
             command=self._toggle_context
         )
         self.context_check.pack(side=tk.LEFT, padx=5)
-        
-        # コンテキストマネージャー
-        self.context_manager = None
-        
-        # キーバインディング
+    
+    def _setup_key_bindings(self):
+        """キーバインディングを設定"""
         self.input_text.bind("<Control-Return>", lambda e: (self._handle_send_button(), "break")[1])
         self.input_text.bind("<Shift-Return>", lambda e: "break")
         
@@ -636,38 +651,54 @@ class LLMChatViewHTML(ttk.Frame):
         # UIをクリア
         self.input_text.delete("1.0", tk.END)
         
-        # コンテキスト情報を取得
-        context_info = None
-        if self.context_var.get() and self.context_manager:
-            workbench = get_workbench()
-            editor = workbench.get_editor_notebook().get_current_editor()
-            if editor:
-                current_file = editor.get_filename()
-                text_widget = editor.get_text_widget()
-                
-                if text_widget.tag_ranges("sel"):
-                    # 選択範囲がある場合
-                    start_line = int(text_widget.index("sel.first").split(".")[0])
-                    end_line = int(text_widget.index("sel.last").split(".")[0])
-                    file_name = Path(current_file).name if current_file else "Unknown"
-                    context_info = f"Context: {file_name} (lines {start_line}-{end_line})"
-                elif current_file:
-                    # ファイル全体の場合
-                    file_name = Path(current_file).name
-                    context_info = f"Context: {file_name} (entire file)"
+        # コンテキスト情報を取得して表示メッセージを作成
+        context_info = self._get_context_info()
+        display_message = self._format_display_message(message, context_info)
         
-        # ユーザーメッセージを追加（コンテキスト情報付き）
-        if context_info:
-            display_message = f"{message}\n\n[{context_info}]"
-        else:
-            display_message = message
-        
+        # ユーザーメッセージを追加
         self._add_message("user", display_message)
         
         # ユーザーメッセージ追加後に最下部にスクロール
         self.after(100, self._scroll_to_bottom)
         
-        # 処理中フラグ
+        # 生成を開始
+        self._start_generation(message)
+    
+    def _get_context_info(self) -> Optional[str]:
+        """コンテキスト情報を取得"""
+        if not (self.context_var.get() and self.context_manager):
+            return None
+        
+        workbench = get_workbench()
+        editor = workbench.get_editor_notebook().get_current_editor()
+        if not editor:
+            return None
+        
+        current_file = editor.get_filename()
+        text_widget = editor.get_text_widget()
+        
+        if text_widget.tag_ranges("sel"):
+            # 選択範囲がある場合
+            start_line = int(text_widget.index("sel.first").split(".")[0])
+            end_line = int(text_widget.index("sel.last").split(".")[0])
+            file_name = Path(current_file).name if current_file else "Unknown"
+            return f"Context: {file_name} (lines {start_line}-{end_line})"
+        elif current_file:
+            # ファイル全体の場合
+            file_name = Path(current_file).name
+            return f"Context: {file_name} (entire file)"
+        
+        return None
+    
+    def _format_display_message(self, message: str, context_info: Optional[str]) -> str:
+        """表示用メッセージをフォーマット"""
+        if context_info:
+            return f"{message}\n\n[{context_info}]"
+        return message
+    
+    def _start_generation(self, message: str):
+        """生成処理を開始"""
+        # 処理中フラグを設定
         self._processing = True
         with self._message_lock:
             self._current_message = ""
@@ -762,198 +793,214 @@ class LLMChatViewHTML(ttk.Frame):
             from .. import get_llm_client
             llm_client = get_llm_client()
             
-            # コンテキストを含める場合
-            if self.context_var.get() and self.context_manager:
-                # 現在のエディタ情報を取得
-                workbench = get_workbench()
-                editor = workbench.get_editor_notebook().get_current_editor()
-                current_file = None
-                selected_text = None
-                
-                if editor:
-                    current_file = editor.get_filename()
-                    text_widget = editor.get_text_widget()
-                    
-                    if text_widget.tag_ranges("sel"):
-                        selected_text = text_widget.get("sel.first", "sel.last")
-                        start_line = int(text_widget.index("sel.first").split(".")[0])
-                        end_line = int(text_widget.index("sel.last").split(".")[0])
-                        selection_info = f"Selected lines: {start_line}-{end_line}"
-                
-                if selected_text:
-                    # ファイル拡張子から言語を判定
-                    file_ext = Path(current_file).suffix.lower() if current_file else '.py'
-                    lang_map = {'.py': 'python', '.js': 'javascript', '.java': 'java', '.cpp': 'cpp', '.c': 'c'}
-                    lang = lang_map.get(file_ext, 'python')
-                    
-                    context_str = f"""File: {Path(current_file).name if current_file else 'Unknown'}
+            # プロンプトと会話履歴を準備
+            full_prompt = self._prepare_prompt_with_context(message)
+            conversation_history = self._prepare_conversation_history()
+            
+            # ストリーミング生成
+            self._stream_generation(llm_client, full_prompt, conversation_history)
+            
+        except Exception as e:
+            self._handle_generation_error(e)
+    
+    def _prepare_prompt_with_context(self, message: str) -> str:
+        """コンテキストを含むプロンプトを準備"""
+        if not (self.context_var.get() and self.context_manager):
+            return message
+        
+        context_str = self._build_context_string()
+        if context_str:
+            return f"""Here is the context from the current project:
+
+{context_str}
+
+Based on this context, {message}"""
+        
+        return message
+    
+    def _build_context_string(self) -> Optional[str]:
+        """コンテキスト文字列を構築"""
+        workbench = get_workbench()
+        editor = workbench.get_editor_notebook().get_current_editor()
+        if not editor:
+            return None
+        
+        current_file = editor.get_filename()
+        text_widget = editor.get_text_widget()
+        
+        # 選択範囲のテキストを取得
+        selected_text = self._get_selected_text(text_widget)
+        if selected_text:
+            return self._format_selected_context(current_file, text_widget, selected_text)
+        
+        # 選択範囲がない場合はファイル全体
+        if current_file:
+            return self._format_full_file_context(current_file, text_widget)
+        
+        return None
+    
+    def _get_selected_text(self, text_widget) -> Optional[str]:
+        """選択されたテキストを取得"""
+        if text_widget.tag_ranges("sel"):
+            return text_widget.get("sel.first", "sel.last")
+        return None
+    
+    def _format_selected_context(self, current_file: str, text_widget, selected_text: str) -> str:
+        """選択範囲のコンテキストをフォーマット"""
+        start_line = int(text_widget.index("sel.first").split(".")[0])
+        end_line = int(text_widget.index("sel.last").split(".")[0])
+        selection_info = f"Selected lines: {start_line}-{end_line}"
+        
+        lang = self._detect_language(current_file)
+        file_name = Path(current_file).name if current_file else 'Unknown'
+        
+        return f"""File: {file_name}
 {selection_info}
 
 ```{lang}
 {selected_text}
 ```"""
-                    # コンテキスト使用メッセージは不要
-                elif editor and current_file:
-                    # 選択範囲がない場合は、ファイル全体を取得
-                    full_text = text_widget.get("1.0", tk.END).strip()
-                    if full_text:
-                        # ファイル拡張子から言語を判定
-                        file_ext = Path(current_file).suffix.lower()
-                        lang_map = {'.py': 'python', '.js': 'javascript', '.java': 'java', '.cpp': 'cpp', '.c': 'c'}
-                        lang = lang_map.get(file_ext, 'python')
-                        
-                        context_str = f"""File: {Path(current_file).name}
+    
+    def _format_full_file_context(self, current_file: str, text_widget) -> Optional[str]:
+        """ファイル全体のコンテキストをフォーマット"""
+        full_text = text_widget.get("1.0", tk.END).strip()
+        if not full_text:
+            return None
+        
+        lang = self._detect_language(current_file)
+        file_name = Path(current_file).name
+        
+        return f"""File: {file_name}
 Full file content:
 
 ```{lang}
 {full_text}
 ```"""
-                        # コンテキスト使用メッセージは不要
-                    else:
-                        context_str = None
-                else:
-                    context_str = None
-                
-                if context_str:
-                    full_prompt = f"""Here is the context from the current project:
-
-{context_str}
-
-Based on this context, {message}"""
-                    
-                    # 会話履歴を準備
-                    conversation_history = self._prepare_conversation_history()
-                    
-                    for token in llm_client.generate_stream(
-                        full_prompt,
-                        messages=conversation_history
-                    ):
-                        if self._stop_generation:
-                            self.message_queue.put(("complete", None))
-                            return
-                        self.message_queue.put(("token", token))
-                else:
-                    # 会話履歴を準備
-                    conversation_history = self._prepare_conversation_history()
-                    
-                    for token in llm_client.generate_stream(
-                        message,
-                        messages=conversation_history
-                    ):
-                        if self._stop_generation:
-                            self.message_queue.put(("complete", None))
-                            return
-                        self.message_queue.put(("token", token))
-            else:
-                # 会話履歴を準備
-                conversation_history = self._prepare_conversation_history()
-                
-                for token in llm_client.generate_stream(
-                    message,
-                    messages=conversation_history
-                ):
-                    if self._stop_generation:
-                        self.message_queue.put(("complete", None))
-                        return
-                    self.message_queue.put(("token", token))
-            
-            self.message_queue.put(("complete", None))
-            
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            logger.error(f"Error generating response: {e}\n{error_details}")
-            # ユーザーフレンドリーなエラーメッセージ
-            from ..utils.error_messages import get_user_friendly_error_message
-            user_message = get_user_friendly_error_message(e, "generating response")
-            self.message_queue.put(("error", user_message))
+    
+    def _detect_language(self, file_path: str) -> str:
+        """ファイル拡張子から言語を検出"""
+        if not file_path:
+            return 'python'
+        
+        file_ext = Path(file_path).suffix.lower()
+        lang_map = {'.py': 'python', '.js': 'javascript', '.java': 'java', '.cpp': 'cpp', '.c': 'c'}
+        return lang_map.get(file_ext, 'python')
+    
+    def _stream_generation(self, llm_client, prompt: str, conversation_history: list):
+        """LLMからストリーミング生成"""
+        for token in llm_client.generate_stream(prompt, messages=conversation_history):
+            if self._stop_generation:
+                self.message_queue.put(("complete", None))
+                return
+            self.message_queue.put(("token", token))
+        
+        self.message_queue.put(("complete", None))
+    
+    def _handle_generation_error(self, error: Exception):
+        """生成エラーを処理"""
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Error generating response: {error}\n{error_details}")
+        
+        # ユーザーフレンドリーなエラーメッセージ
+        from ..utils.error_messages import get_user_friendly_error_message
+        user_message = get_user_friendly_error_message(error, "generating response")
+        self.message_queue.put(("error", user_message))
     
     def _process_queue(self):
         """メッセージキューを処理"""
         try:
-            update_needed = False
-            
             while True:
                 msg_type, content = self.message_queue.get_nowait()
                 
                 if msg_type == "token":
-                    # 最初のトークンを受け取ったら準備完了
-                    if not self._first_token_received:
-                        self._first_token_received = True
-                        # ストリーミングフレームのタイトルを更新
-                        self.streaming_frame.config(text=tr("Assistant"))
-                    
-                    with self._message_lock:
-                        self._current_message += content
-                    
-                    # ストリーミングテキストに追加表示
-                    self.streaming_text.config(state=tk.NORMAL)
-                    self.streaming_text.insert(tk.END, content)
-                    self.streaming_text.see(tk.END)
-                    self.streaming_text.config(state=tk.DISABLED)
-                    
-                    update_needed = True
-                
+                    self._handle_token(content)
                 elif msg_type == "complete":
-                    # ストリーミングエリアを非表示にしてHTMLビューに転送
-                    self._stop_generating_animation()
-                    
-                    # 現在のメッセージがある場合、HTMLビューに転送
-                    with self._message_lock:
-                        current_msg = self._current_message
-                    
-                    if current_msg:
-                        # アシスタントメッセージを追加
-                        self.messages.append(("assistant", current_msg))
-                        
-                        # HTMLビューに完全なメッセージを表示
-                        self._update_html(full_reload=True)
-                        
-                        # HTMLの更新完了後に最下部にスクロール
-                        self.after(200, self._scroll_to_bottom)
-                        
-                        with self._message_lock:
-                            self._current_message = ""
-                        
-                        # 停止された場合のみ停止メッセージを追加
-                        if self._stop_generation:
-                            self._add_message("system", tr("[Generation stopped by user]"))
-                    elif self._stop_generation:
-                        # メッセージがない場合でも停止メッセージを追加
-                        self._add_message("system", tr("[Generation stopped by user]"))
-                    
-                    self._processing = False
-                    self._stop_generation = False
-                    self.send_button.config(text=tr("Send"), state=tk.NORMAL)
-                    
-                    # グローバルの生成状態を解除
-                    from .. import set_llm_busy
-                    set_llm_busy(False)
-                
+                    self._handle_completion()
                 elif msg_type == "error":
-                    # ストリーミングエリアを非表示
-                    self._stop_generating_animation()
-                    
-                    self._add_message("system", f"Error: {content}")
-                    self._processing = False
-                    self._stop_generation = False
-                    self.send_button.config(text=tr("Send"), state=tk.NORMAL)
-                    
-                    # グローバルの生成状態を解除
-                    from .. import set_llm_busy
-                    set_llm_busy(False)
-                
+                    self._handle_error(content)
                 elif msg_type == "info":
                     self._add_message("system", content)
             
         except queue.Empty:
             pass
         
-        # ストリーミング中はHTMLビューを更新しない（ストリーミングテキストエリアで表示中）
-        # HTMLビューの更新は完了時に一度だけ実行
-        
         # 次のチェックをスケジュール
         self._queue_check_id = self.after(50, self._process_queue)
+    
+    def _handle_token(self, content: str):
+        """トークンを処理"""
+        # 最初のトークンを受け取ったら準備完了
+        if not self._first_token_received:
+            self._first_token_received = True
+            # ストリーミングフレームのタイトルを更新
+            self.streaming_frame.config(text=tr("Assistant"))
+        
+        with self._message_lock:
+            self._current_message += content
+        
+        # ストリーミングテキストに追加表示
+        self._update_streaming_text(content)
+    
+    def _update_streaming_text(self, content: str):
+        """ストリーミングテキストを更新"""
+        self.streaming_text.config(state=tk.NORMAL)
+        self.streaming_text.insert(tk.END, content)
+        self.streaming_text.see(tk.END)
+        self.streaming_text.config(state=tk.DISABLED)
+    
+    def _handle_completion(self):
+        """生成完了を処理"""
+        # ストリーミングエリアを非表示にしてHTMLビューに転送
+        self._stop_generating_animation()
+        
+        # 現在のメッセージがある場合、HTMLビューに転送
+        with self._message_lock:
+            current_msg = self._current_message
+        
+        if current_msg:
+            self._finalize_assistant_message(current_msg)
+        elif self._stop_generation:
+            # メッセージがない場合でも停止メッセージを追加
+            self._add_message("system", tr("[Generation stopped by user]"))
+        
+        self._reset_generation_state()
+    
+    def _finalize_assistant_message(self, message: str):
+        """アシスタントメッセージを完了"""
+        # アシスタントメッセージを追加
+        self.messages.append(("assistant", message))
+        
+        # HTMLビューに完全なメッセージを表示
+        self._update_html(full_reload=True)
+        
+        # HTMLの更新完了後に最下部にスクロール
+        self.after(200, self._scroll_to_bottom)
+        
+        with self._message_lock:
+            self._current_message = ""
+        
+        # 停止された場合のみ停止メッセージを追加
+        if self._stop_generation:
+            self._add_message("system", tr("[Generation stopped by user]"))
+    
+    def _handle_error(self, error_message: str):
+        """エラーを処理"""
+        # ストリーミングエリアを非表示
+        self._stop_generating_animation()
+        
+        self._add_message("system", f"Error: {error_message}")
+        self._reset_generation_state()
+    
+    def _reset_generation_state(self):
+        """生成状態をリセット"""
+        self._processing = False
+        self._stop_generation = False
+        self.send_button.config(text=tr("Send"), state=tk.NORMAL)
+        
+        # グローバルの生成状態を解除
+        from .. import set_llm_busy
+        set_llm_busy(False)
     
     def _delayed_update(self):
         """遅延更新を実行（ストリーミング中は使用しない）"""
@@ -966,135 +1013,171 @@ Based on this context, {message}"""
         if self._processing:
             return
         
-        # 現在のファイルから言語を検出
-        workbench = get_workbench()
-        editor = workbench.get_editor_notebook().get_current_editor()
-        lang = 'python'  # デフォルト
-        if editor:
-            filename = editor.get_filename()
-            if filename:
-                file_ext = Path(filename).suffix.lower()
-                lang_map = {'.py': 'python', '.js': 'javascript', '.java': 'java', '.cpp': 'cpp', '.c': 'c'}
-                lang = lang_map.get(file_ext, 'python')
+        # 言語を検出
+        lang = self._detect_current_file_language()
         
-        # 言語設定を取得
-        language_setting = workbench.get_option("llm.output_language", "auto")
-        if language_setting == "auto":
-            # Thonnyの言語設定から取得
-            thonny_lang = workbench.get_option("general.language", "en")
-            language_setting = "Japanese" if thonny_lang.startswith("ja") else "English"
-        elif language_setting == "ja":
-            language_setting = "Japanese"
-        elif language_setting == "en":
-            language_setting = "English"
+        # 説明用のプロンプトを生成
+        message = self._build_code_explanation_prompt(code, lang)
         
-        # スキルレベルを考慮したプロンプトを生成
-        skill_level = workbench.get_option("llm.skill_level", "beginner")
-        
-        # スキルレベルの指示（英語で統一）
-        if skill_level == "beginner":
-            skill_instruction = "Explain in simple terms for a beginner. Avoid technical jargon and use plain language."
-        elif skill_level == "intermediate":
-            skill_instruction = "Explain assuming basic programming knowledge."
-        else:  # advanced
-            skill_instruction = "Provide a detailed explanation including algorithmic efficiency and design considerations."
-        
-        # 言語別のプロンプト
-        if language_setting == "Japanese":
-            message = f"{skill_instruction}\n\n以下のコードを説明してください:\n```{lang}\n{code}\n```"
-        else:  # English
-            message = f"{skill_instruction}\n\nPlease explain this code:\n```{lang}\n{code}\n```"
-        
+        # プロンプトを入力して送信
         self.input_text.delete("1.0", tk.END)
         self.input_text.insert("1.0", message)
         self._send_message()
     
+    def _detect_current_file_language(self) -> str:
+        """現在のファイルから言語を検出"""
+        workbench = get_workbench()
+        editor = workbench.get_editor_notebook().get_current_editor()
+        
+        if editor:
+            filename = editor.get_filename()
+            if filename:
+                return self._detect_language(filename)
+        
+        return 'python'  # デフォルト
+    
+    def _build_code_explanation_prompt(self, code: str, lang: str) -> str:
+        """コード説明用のプロンプトを構築"""
+        workbench = get_workbench()
+        
+        # 言語設定を取得
+        language_setting = self._get_language_setting(workbench)
+        
+        # スキルレベルの指示を取得
+        skill_instruction = self._get_code_explanation_instruction(workbench)
+        
+        # 言語別のプロンプトを構築
+        if language_setting == "Japanese":
+            return f"{skill_instruction}\n\n以下のコードを説明してください:\n```{lang}\n{code}\n```"
+        else:  # English
+            return f"{skill_instruction}\n\nPlease explain this code:\n```{lang}\n{code}\n```"
+    
+    def _get_code_explanation_instruction(self, workbench_settings) -> str:
+        """コード説明用のスキルレベル指示を取得"""
+        skill_level = workbench_settings.get_option("llm.skill_level", "beginner")
+        
+        skill_instructions = {
+            "beginner": "Explain in simple terms for a beginner. Avoid technical jargon and use plain language.",
+            "intermediate": "Explain assuming basic programming knowledge.",
+            "advanced": "Provide a detailed explanation including algorithmic efficiency and design considerations."
+        }
+        
+        return skill_instructions.get(skill_level, skill_instructions["beginner"])
+    
     def _explain_last_error(self):
         """最後のエラーを説明"""
         try:
-            shell_view = get_workbench().get_view("ShellView")
-            if not shell_view:
-                messagebox.showinfo("No Shell", "Shell view not found.")
-                return
-            
-            shell_text = shell_view.text
-            shell_content = shell_text.get("1.0", tk.END)
-            lines = shell_content.strip().split('\n')
-            
-            error_lines = []
-            error_found = False
-            
-            for i in range(len(lines) - 1, -1, -1):
-                line = lines[i]
-                
-                if error_found and (line.startswith(">>>") or line.startswith("===") or not line.strip()):
-                    break
-                
-                if any(error_type in line for error_type in ["Error", "Exception", "Traceback"]):
-                    error_found = True
-                
-                if error_found:
-                    error_lines.insert(0, line)
-            
-            if not error_lines:
+            error_message = self._extract_error_from_shell()
+            if not error_message:
                 messagebox.showinfo("No Error", "No recent error found in shell.")
                 return
             
-            error_message = '\n'.join(error_lines)
-            
-            code = ""
-            editor = get_workbench().get_editor_notebook().get_current_editor()
-            if editor:
-                try:
-                    code = editor.get_text_widget().get("1.0", tk.END).strip()
-                except:
-                    pass
-            
-            # 言語設定とスキルレベルを取得
-            workbench_settings = get_workbench()
-            language_setting = workbench_settings.get_option("llm.output_language", "auto")
-            if language_setting == "auto":
-                thonny_lang = workbench_settings.get_option("general.language", "en")
-                language_setting = "Japanese" if thonny_lang.startswith("ja") else "English"
-            elif language_setting == "ja":
-                language_setting = "Japanese"
-            elif language_setting == "en":
-                language_setting = "English"
-            
-            skill_level = workbench_settings.get_option("llm.skill_level", "beginner")
-            
-            # スキルレベルの指示（英語で統一）
-            if skill_level == "beginner":
-                skill_instruction = "Explain the error in simple terms for a beginner and provide clear solutions."
-            elif skill_level == "intermediate":
-                skill_instruction = "Explain the error and solutions assuming basic programming knowledge."
-            else:  # advanced
-                skill_instruction = "Provide a technical explanation of the error and efficient solutions."
-            
-            # 言語別のプロンプト
-            if language_setting == "Japanese":
-                if code:
-                    prompt = f"{skill_instruction}\n\n以下のエラーが発生しました:\n```\n{error_message}\n```\n\nこのコードで:\n```python\n{code}\n```"
-                else:
-                    prompt = f"{skill_instruction}\n\n以下のエラーが発生しました:\n```\n{error_message}\n```"
-            else:  # English
-                if code:
-                    prompt = f"{skill_instruction}\n\nI encountered this error:\n```\n{error_message}\n```\n\nIn this code:\n```python\n{code}\n```"
-                else:
-                    prompt = f"{skill_instruction}\n\nI encountered this error:\n```\n{error_message}\n```"
+            code = self._get_current_editor_code()
+            prompt = self._build_error_explanation_prompt(error_message, code)
             
             self.input_text.delete("1.0", tk.END)
             self.input_text.insert("1.0", prompt)
             self._send_message()
             
         except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            logger.error(f"Error in _explain_last_error: {e}\n{error_details}")
-            messagebox.showerror(
-                tr("Error"), 
-                f"{tr('Failed to get error information')}: {str(e)}"
-            )
+            self._handle_explain_error_failure(e)
+    
+    def _extract_error_from_shell(self) -> Optional[str]:
+        """シェルからエラーメッセージを抽出"""
+        shell_view = get_workbench().get_view("ShellView")
+        if not shell_view:
+            return None
+        
+        shell_text = shell_view.text
+        shell_content = shell_text.get("1.0", tk.END)
+        lines = shell_content.strip().split('\n')
+        
+        error_lines = []
+        error_found = False
+        
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i]
+            
+            if error_found and (line.startswith(">>>") or line.startswith("===") or not line.strip()):
+                break
+            
+            if any(error_type in line for error_type in ["Error", "Exception", "Traceback"]):
+                error_found = True
+            
+            if error_found:
+                error_lines.insert(0, line)
+        
+        return '\n'.join(error_lines) if error_lines else None
+    
+    def _get_current_editor_code(self) -> str:
+        """現在のエディタのコードを取得"""
+        editor = get_workbench().get_editor_notebook().get_current_editor()
+        if editor:
+            try:
+                return editor.get_text_widget().get("1.0", tk.END).strip()
+            except:
+                pass
+        return ""
+    
+    def _build_error_explanation_prompt(self, error_message: str, code: str) -> str:
+        """エラー説明用のプロンプトを構築"""
+        workbench_settings = get_workbench()
+        
+        # 言語設定を取得
+        language_setting = self._get_language_setting(workbench_settings)
+        
+        # スキルレベルの指示を取得
+        skill_instruction = self._get_skill_instruction(workbench_settings)
+        
+        # 言語別のプロンプトを構築
+        return self._format_error_prompt(language_setting, skill_instruction, error_message, code)
+    
+    def _get_language_setting(self, workbench_settings) -> str:
+        """言語設定を取得"""
+        language_setting = workbench_settings.get_option("llm.output_language", "auto")
+        if language_setting == "auto":
+            thonny_lang = workbench_settings.get_option("general.language", "en")
+            return "Japanese" if thonny_lang.startswith("ja") else "English"
+        elif language_setting == "ja":
+            return "Japanese"
+        elif language_setting == "en":
+            return "English"
+        return "English"
+    
+    def _get_skill_instruction(self, workbench_settings) -> str:
+        """スキルレベルに応じた指示を取得"""
+        skill_level = workbench_settings.get_option("llm.skill_level", "beginner")
+        
+        skill_instructions = {
+            "beginner": "Explain the error in simple terms for a beginner and provide clear solutions.",
+            "intermediate": "Explain the error and solutions assuming basic programming knowledge.",
+            "advanced": "Provide a technical explanation of the error and efficient solutions."
+        }
+        
+        return skill_instructions.get(skill_level, skill_instructions["beginner"])
+    
+    def _format_error_prompt(self, language: str, skill_instruction: str, error_message: str, code: str) -> str:
+        """エラープロンプトをフォーマット"""
+        if language == "Japanese":
+            if code:
+                return f"{skill_instruction}\n\n以下のエラーが発生しました:\n```\n{error_message}\n```\n\nこのコードで:\n```python\n{code}\n```"
+            else:
+                return f"{skill_instruction}\n\n以下のエラーが発生しました:\n```\n{error_message}\n```"
+        else:  # English
+            if code:
+                return f"{skill_instruction}\n\nI encountered this error:\n```\n{error_message}\n```\n\nIn this code:\n```python\n{code}\n```"
+            else:
+                return f"{skill_instruction}\n\nI encountered this error:\n```\n{error_message}\n```"
+    
+    def _handle_explain_error_failure(self, error: Exception):
+        """エラー説明の失敗を処理"""
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Error in _explain_last_error: {error}\n{error_details}")
+        messagebox.showerror(
+            tr("Error"), 
+            f"{tr('Failed to get error information')}: {str(error)}"
+        )
     
     def _show_settings(self):
         """設定ダイアログを表示"""

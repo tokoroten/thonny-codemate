@@ -13,9 +13,6 @@ from .unified_error_handler import (
     safe_execute
 )
 
-# loggerモジュールから
-from .logger import get_safe_logger
-
 __all__ = [
     'ErrorContext',
     'log_error_with_context',
@@ -25,5 +22,4 @@ __all__ = [
     'retry_operation',
     'retry_decorator',
     'safe_execute',
-    'get_safe_logger',
 ]

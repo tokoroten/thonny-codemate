@@ -216,6 +216,7 @@ python -m debugpy --listen 5678 --wait-for-client -m thonny
 - GitHub Copilotの機能にインスパイアされました
 - [llama-cpp-python](https://github.com/abetlen/llama-cpp-python)を基盤として構築
 - [Thonny IDE](https://thonny.org/)向けに設計
+- **このプロジェクトのコードの99%は[Claude Code](https://claude.ai/code)によって生成されました** - AI支援開発の可能性を示すプロジェクトです
 
 ## ステータス
 

@@ -75,15 +75,10 @@ def load_plugin():
     """
     global _plugin_loaded, _llm_client
     
-    # デバッグ: プラグインロードの開始を表示
-    print("=" * 60)
-    print("Thonny Codemate Plugin: load_plugin() called")
-    print("=" * 60)
     
     if _plugin_loaded:
         try:
             logger.warning("Plugin already loaded, skipping initialization")
-            print("WARNING: Plugin already loaded, skipping initialization")
         except Exception:
             pass
         return
@@ -91,7 +86,6 @@ def load_plugin():
     try:
         from thonny import get_workbench
         workbench = get_workbench()
-        print(f"✓ Got workbench: {workbench}")
         
         try:
             logger.info("Loading Thonny Local LLM Plugin...")
@@ -102,7 +96,6 @@ def load_plugin():
         # UIコンポーネントを登録（常にHTMLビューを使用）
         try:
             from .ui.chat_view_html import LLMChatViewHTML
-            print("✓ Successfully imported LLMChatViewHTML")
             workbench.add_view(
                 LLMChatViewHTML,
                 "LLM Assistant",
@@ -110,19 +103,15 @@ def load_plugin():
                 visible_by_default=False,
                 default_position_key="e"
             )
-            print("✓ LLM Assistant view registered successfully")
         except Exception as e:
             logger.error(f"Failed to register chat view: {e}", exc_info=True)
-            print(f"✗ Failed to register chat view: {e}")
-            import traceback
-            traceback.print_exc()
         
         # メニューコマンドを追加
         workbench.add_command(
             command_id="show_llm_assistant",
             menu_name="tools",
             command_label=tr("Show LLM Assistant"),
-            handler=lambda: workbench.show_view("LLMChatViewHTML"),  # クラス名を使用
+            handler=lambda: workbench.show_view("LLM Assistant"),  # ビュー名を使用
             group=150
         )
         
