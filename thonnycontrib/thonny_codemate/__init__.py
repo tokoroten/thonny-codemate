@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 logger.disabled = True
 
 # プラグインのバージョン
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 # グローバル変数でプラグインの状態を管理
 _plugin_loaded = False
@@ -111,7 +111,7 @@ def load_plugin():
             command_id="show_llm_assistant",
             menu_name="tools",
             command_label=tr("Show LLM Assistant"),
-            handler=lambda: workbench.show_view("LLM Assistant"),  # ビュー名を使用
+            handler=lambda: workbench.show_view("LLMChatViewHTML"),  # クラス名を使用
             group=150
         )
         
