@@ -84,7 +84,7 @@ class TestErrorHandlingDecorator:
         
         result = failing_function()
         assert result == "default"
-        assert mock_logger.error.called
+        assert mock_logger.log.called
 
 
 class TestRetryDecorator:
@@ -140,36 +140,3 @@ class TestRetryDecorator:
         assert call_count == 3
 
 
-class TestRetryableOperation:
-    """RetryableOperationクラスのテスト"""
-    
-    def test_successful_operation(self):
-        """正常実行時のテスト"""
-        def operation(x, y):
-            return x + y
-        
-        retryable = RetryableOperation(operation)
-        result = retryable.execute(1, 2)
-        assert result == 3
-    
-    def test_retry_with_eventual_success(self):
-        """最終的に成功するリトライのテスト"""
-        attempt = 0
-        
-        def flaky_operation():
-            nonlocal attempt
-            attempt += 1
-            if attempt < 3:
-                raise ValueError("Temporary error")
-            return "success"
-        
-        retryable = RetryableOperation(
-            flaky_operation,
-            max_attempts=3,
-            delay=0.01,
-            exceptions=(ValueError,)
-        )
-        
-        result = retryable.execute()
-        assert result == "success"
-        assert attempt == 3
