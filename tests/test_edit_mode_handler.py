@@ -135,7 +135,6 @@ def create_markdown():
     
     def test_extract_code_block_indented(self):
         """Test extraction with indented code blocks"""
-        # Regex now requires fence to be at start of line (with optional whitespace)
         response = """The solution:
 ```python
 def solve():
