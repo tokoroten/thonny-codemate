@@ -37,9 +37,38 @@ AIはこのファイルを参照して作業を進め、完了したタスクは
 - [x] Add user skill level selection feature (2025-06-24完了)
 - [x] Implement multi-file context understanding (2025-06-25完了)
 - [x] Add support for external APIs (ChatGPT/Ollama/OpenRouter) (2025-06-25完了)
+- [x] Prepare PyPI package and publish (2025-06-30完了)
 - [ ] Implement inline code completion (cursor position)
 - [ ] Create USB portable deployment configuration
-- [ ] Prepare PyPI package and publish
+
+## Recent Updates (2025-06-30)
+
+### Repository Renaming and Package Updates
+- Renamed package from `thonny_local_ollama` to `thonny-codemate`
+- Updated all references in code, documentation, and configuration files
+- Updated GitHub repository URL to https://github.com/tokoroten/thonny-codemate
+- Added acknowledgment that 99% of code was created by Claude Code
+
+### Python Version Requirements Update
+- Updated minimum Python version from 3.8 to 3.10 to match Thonny requirements
+- Updated all CI/CD workflows to test only Python 3.10, 3.11, and 3.12
+- Updated pyproject.toml and tool configurations accordingly
+
+### Test Suite Optimization
+- Removed heavy integration tests that require Thonny environment
+- Removed performance monitoring and message virtualization tests
+- Fixed all module import errors and deprecated assertions
+- All tests now pass in GitHub Actions CI
+
+### Error Handling Consolidation
+- Created unified error handling utilities in utils/unified_error_handler.py
+- Consolidated duplicate error handling code across the codebase
+- Improved user-friendly error messages with proper localization
+
+### GitHub Actions Setup
+- Created automated release workflow for PyPI publishing
+- Configured support for both TestPyPI and production PyPI
+- Set up proper test workflow with matrix strategy for multiple OS and Python versions
 
 ## Recent Updates (2025-06-26)
 
