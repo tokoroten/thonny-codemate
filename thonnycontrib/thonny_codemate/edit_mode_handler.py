@@ -37,11 +37,15 @@ Language: {language}
 
 User request: {user_prompt}
 
-Please provide the {code_instruction}. Your response MUST start with a markdown code block using triple backticks (```) containing the {output_type}:
+IMPORTANT: Your response must contain ONLY ONE code block. Do NOT add any explanations, comments, or additional text after the code block.
+
+Please provide the {code_instruction} in a single markdown code block:
 
 ```{language}
-# Your code here
+# Your modified code here
 ```
+
+Remember: Output ONLY the code block above. No explanations or additional text after the closing ```.
 """
 
     SELECTION_TEMPLATE = """Selected region (lines {start_line}-{end_line}):
