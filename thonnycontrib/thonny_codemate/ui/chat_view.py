@@ -41,6 +41,7 @@ class LLMChatView(ttk.Frame):
         self._processing = False
         self._first_token = True  # ストリーミング用のフラグ
         self._stop_generation = False  # 生成を停止するフラグ
+        self._current_assistant_message = ""  # 現在のアシスタントメッセージを追跡
         
         # 定期的にキューをチェック
         self._queue_check_id = self.after(100, self._process_queue)
@@ -370,9 +371,33 @@ class LLMChatView(ttk.Frame):
         )
         thread.start()
     
+    def _prepare_conversation_history(self, max_history: int = 10) -> list:
+        """会話履歴をOpenAI API形式で準備"""
+        history = []
+        
+        # 最新のmax_history個のメッセージを取得
+        for msg in self.chat_history[-max_history:]:
+            sender = msg.get("sender", "")
+            text = msg.get("message", "")
+            
+            if sender == "You" or sender == "User":
+                # コンテキスト情報を除去（[Context: ...]の部分）
+                clean_text = text
+                if "\n\n[Context:" in text:
+                    clean_text = text.split("\n\n[Context:")[0]
+                history.append({"role": "user", "content": clean_text})
+            elif sender == "Assistant":
+                history.append({"role": "assistant", "content": text})
+            # システムメッセージは除外
+        
+        return history
+    
     def _generate_response(self, message: str):
         """バックグラウンドで応答を生成"""
         try:
+            # 会話履歴を準備
+            conversation_history = self._prepare_conversation_history()
+            
             # コンテキストを含める場合
             if self.context_var.get() and self.context_manager:
                 # 現在のエディタのファイルパスを取得
@@ -437,21 +462,21 @@ Full file content:
 
 Based on this context, {message}"""
                     
-                    for token in self.llm_client.generate_stream(full_prompt):
+                    for token in self.llm_client.generate_stream(full_prompt, messages=conversation_history):
                         if self._stop_generation:
                             self.message_queue.put(("info", "\n[Generation stopped by user]"))
                             break
                         self.message_queue.put(("token", token))
                 else:
                     # 通常の生成
-                    for token in self.llm_client.generate_stream(message):
+                    for token in self.llm_client.generate_stream(message, messages=conversation_history):
                         if self._stop_generation:
                             self.message_queue.put(("info", "\n[Generation stopped by user]"))
                             break
                         self.message_queue.put(("token", token))
             else:
                 # 通常の生成
-                for token in self.llm_client.generate_stream(message):
+                for token in self.llm_client.generate_stream(message, messages=conversation_history):
                     if self._stop_generation:
                         self.message_queue.put(("info", "\n[Generation stopped by user]"))
                         break
@@ -478,20 +503,38 @@ Based on this context, {message}"""
                         self.chat_display.insert(tk.END, "\nAssistant: ", "role")
                         self.chat_display.config(state=tk.DISABLED)
                         self._first_token = False
+                        self._current_assistant_message = ""  # アシスタントのメッセージを追跡開始
                     
                     # トークンを追加（ラベルなしで）
                     self.chat_display.config(state=tk.NORMAL)
                     self.chat_display.insert(tk.END, content, "assistant")
                     self.chat_display.see(tk.END)
                     self.chat_display.config(state=tk.DISABLED)
+                    
+                    # アシスタントのメッセージを追跡
+                    if hasattr(self, '_current_assistant_message'):
+                        self._current_assistant_message += content
                 
                 elif msg_type == "complete":
+                    # アシスタントのメッセージを履歴に保存
+                    if hasattr(self, '_current_assistant_message') and self._current_assistant_message:
+                        # 履歴に追加（_append_messageを使わずに直接追加）
+                        self.chat_history.append({"sender": "Assistant", "message": self._current_assistant_message})
+                        self._save_chat_history()
+                        self._current_assistant_message = ""
+                    
                     self._processing = False
                     self._stop_generation = False  # 停止フラグをリセット
                     self.send_button.config(text="Send", state=tk.NORMAL)  # ボタンを送信モードに戻す
                     self._first_token = True  # 次のメッセージ用にリセット
                 
                 elif msg_type == "error":
+                    # エラー前に部分的なアシスタントメッセージがあれば保存
+                    if hasattr(self, '_current_assistant_message') and self._current_assistant_message:
+                        self.chat_history.append({"sender": "Assistant", "message": self._current_assistant_message})
+                        self._save_chat_history()
+                        self._current_assistant_message = ""
+                    
                     self._append_message("System", f"Error: {content}", "error")
                     self._processing = False
                     self._stop_generation = False  # 停止フラグをリセット
@@ -499,6 +542,12 @@ Based on this context, {message}"""
                     self._first_token = True  # 次のメッセージ用にリセット
                 
                 elif msg_type == "info":
+                    # 停止メッセージの前に部分的なアシスタントメッセージがあれば保存
+                    if "Generation stopped" in content and hasattr(self, '_current_assistant_message') and self._current_assistant_message:
+                        self.chat_history.append({"sender": "Assistant", "message": self._current_assistant_message})
+                        self._save_chat_history()
+                        self._current_assistant_message = ""
+                    
                     self._append_message("System", content, "assistant")
                     self._first_token = True  # 次のメッセージ用にリセット
         

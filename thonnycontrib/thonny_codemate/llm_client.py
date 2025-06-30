@@ -562,8 +562,9 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
             # 現在のユーザーメッセージを追加
             messages.append({"role": "user", "content": prompt})
             
+            # 外部プロバイダーにはmessagesのみを渡す（promptは既にmessagesに含まれている）
             for token in self._external_provider.generate_stream(
-                prompt=prompt,
+                prompt="",  # 互換性のため空文字列を渡す
                 messages=messages,
                 temperature=kwargs.get("temperature", self.get_config().temperature),
                 max_tokens=kwargs.get("max_tokens", self.get_config().max_tokens)

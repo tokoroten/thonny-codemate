@@ -15,6 +15,13 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# OpenAI library support
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+
 try:
     from ..utils.retry import retry_network_operation
 except ImportError:
@@ -80,6 +87,20 @@ class ChatGPTProvider(ExternalProvider):
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
+        
+        # OpenAI client (if available)
+        self.openai_client = None
+        if OPENAI_AVAILABLE:
+            try:
+                # OpenAI clientの初期化（base_urlがデフォルトでない場合も対応）
+                if base_url and base_url != "https://api.openai.com/v1":
+                    self.openai_client = OpenAI(api_key=api_key, base_url=base_url)
+                else:
+                    self.openai_client = OpenAI(api_key=api_key)
+                logger.info("Using OpenAI official library")
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenAI client: {e}")
+                self.openai_client = None
     
     @retry_on_network_error()
     def generate(self, prompt: str, **kwargs) -> str:
@@ -126,50 +147,25 @@ class ChatGPTProvider(ExternalProvider):
         """ChatGPT APIを使用してストリーミング生成"""
         messages = kwargs.get("messages", [{"role": "user", "content": prompt}])
         
-        data = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": kwargs.get("temperature", 0.7),
-            "max_tokens": kwargs.get("max_tokens", 2048),
-            "stream": True
-        }
+        # OpenAI公式ライブラリを使用
+        if not self.openai_client:
+            raise Exception("OpenAI library is not available. Please install it with: pip install openai")
         
         try:
-            req = urllib.request.Request(
-                f"{self.base_url}/chat/completions",
-                data=json.dumps(data).encode('utf-8'),
-                headers=self.headers
+            stream = self.openai_client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=kwargs.get("temperature", 0.7),
+                max_tokens=kwargs.get("max_tokens", 2048),
+                stream=True
             )
             
-            with urllib.request.urlopen(req) as response:
-                for line in response:
-                    line = line.decode('utf-8').strip()
-                    if line.startswith("data: "):
-                        data_str = line[6:]
-                        if data_str == "[DONE]":
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            if 'choices' in data and len(data['choices']) > 0:
-                                delta = data['choices'][0].get('delta', {})
-                                if 'content' in delta:
-                                    yield delta['content']
-                        except json.JSONDecodeError:
-                            continue
-                            
-        except urllib.error.HTTPError as e:
-            import traceback
-            logger.error(f"ChatGPT streaming HTTP error: {e}\n{traceback.format_exc()}")
-            if e.code == 401:
-                yield "[Error: Invalid API key]"
-            else:
-                yield f"[Error: HTTP {e.code}]"
-            return
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
         except Exception as e:
-            import traceback
-            logger.error(f"ChatGPT streaming failed: {e}\n{traceback.format_exc()}")
+            logger.error(f"ChatGPT streaming failed: {e}")
             yield f"[Error: {str(e)}]"
-            return
     
     def get_model_info(self, model_name: Optional[str] = None) -> Dict[str, Any]:
         """モデルの詳細情報を取得（コンテキストサイズを含む）"""
@@ -235,9 +231,18 @@ class OllamaProvider(ExternalProvider):
         self.model = model
         self.headers = {"Content-Type": "application/json"}
         
-        # LM Studioかどうかを判定（まずポート番号でヒント、後で確認）
-        self._port_suggests_lmstudio = ":1234" in base_url
-        self.is_lmstudio = None  # 実際の判定は遅延評価
+        # OpenAI client (Ollama and LM Studio are both OpenAI compatible)
+        self.openai_client = None
+        if OPENAI_AVAILABLE:
+            try:
+                # OllamaもLM StudioもOpenAI互換API
+                self.openai_client = OpenAI(
+                    api_key="ollama",  # Ollama/LM Studio don't require real API key
+                    base_url=f"{self.base_url}/v1"
+                )
+                logger.info("Using OpenAI library for Ollama/LM Studio")
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenAI client: {e}")
     
     def _detect_server_type(self):
         """サーバータイプを検出（Ollama or LM Studio）"""
@@ -361,85 +366,29 @@ class OllamaProvider(ExternalProvider):
     
     def generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
         """Ollama/LM Studio APIを使用してストリーミング生成"""
-        if self._detect_server_type():
-            # LM StudioはOpenAI互換API
-            messages = kwargs.get("messages", [])
-            if not messages:
-                messages = [{"role": "user", "content": prompt}]
+        messages = kwargs.get("messages", [])
+        if not messages:
+            messages = [{"role": "user", "content": prompt}]
+        
+        # OpenAIライブラリを使用
+        if not self.openai_client:
+            raise Exception("OpenAI library is not available. Please install it with: pip install openai")
+        
+        try:
+            stream = self.openai_client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=kwargs.get("temperature", 0.7),
+                max_tokens=kwargs.get("max_tokens", 2048),
+                stream=True
+            )
             
-            data = {
-                "model": self.model,
-                "messages": messages,
-                "temperature": kwargs.get("temperature", 0.7),
-                "max_tokens": kwargs.get("max_tokens", 2048),
-                "stream": True
-            }
-            
-            try:
-                req = urllib.request.Request(
-                    f"{self.base_url}/v1/chat/completions",
-                    data=json.dumps(data).encode('utf-8'),
-                    headers=self.headers
-                )
-                
-                with urllib.request.urlopen(req) as response:
-                    for line in response:
-                        line = line.decode('utf-8').strip()
-                        if line.startswith("data: "):
-                            data_str = line[6:]
-                            if data_str == "[DONE]":
-                                break
-                            try:
-                                data = json.loads(data_str)
-                                if 'choices' in data and len(data['choices']) > 0:
-                                    delta = data['choices'][0].get('delta', {})
-                                    if 'content' in delta:
-                                        yield delta['content']
-                            except json.JSONDecodeError:
-                                continue
-                                
-            except Exception as e:
-                logger.error(f"LM Studio streaming failed: {e}")
-                raise
-        else:
-            # Ollama API
-            # messagesパラメータがある場合は会話履歴を含める
-            messages = kwargs.get("messages", [])
-            if messages:
-                # システムメッセージとユーザーメッセージを含む完全なプロンプトを構築
-                full_prompt = self._build_prompt_from_messages(messages)
-            else:
-                full_prompt = prompt
-                
-            data = {
-                "model": self.model,
-                "prompt": full_prompt,
-                "stream": True,
-                "options": {
-                    "temperature": kwargs.get("temperature", 0.7),
-                    "num_predict": kwargs.get("max_tokens", 2048),
-                }
-            }
-            
-            try:
-                req = urllib.request.Request(
-                    f"{self.base_url}/api/generate",
-                    data=json.dumps(data).encode('utf-8'),
-                    headers=self.headers
-                )
-                
-                with urllib.request.urlopen(req) as response:
-                    for line in response:
-                        try:
-                            data = json.loads(line.decode('utf-8'))
-                            if 'response' in data:
-                                yield data['response']
-                        except json.JSONDecodeError:
-                            continue
-                            
-            except Exception as e:
-                logger.error(f"Ollama streaming failed: {e}")
-                raise
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            logger.error(f"Ollama/LM Studio streaming failed: {e}")
+            yield f"[Error: {str(e)}]"
     
     @retry_network_operation
     def get_models(self) -> list[str]:
@@ -588,6 +537,30 @@ class OpenRouterProvider(ExternalProvider):
             "HTTP-Referer": "https://github.com/thonny/thonny",
             "X-Title": "Thonny Local LLM Plugin"
         }
+        
+        # OpenRouter is OpenAI compatible
+        self.openai_client = None
+        if OPENAI_AVAILABLE:
+            try:
+                # カスタムヘッダーを設定
+                from openai import DefaultHttpxClient
+                import httpx
+                
+                client = DefaultHttpxClient(
+                    headers={
+                        "HTTP-Referer": "https://github.com/thonny/thonny",
+                        "X-Title": "Thonny Local LLM Plugin"
+                    }
+                )
+                
+                self.openai_client = OpenAI(
+                    api_key=api_key,
+                    base_url=self.base_url,
+                    http_client=client
+                )
+                logger.info("Using OpenAI library for OpenRouter")
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenAI client for OpenRouter: {e}")
     
     def generate(self, prompt: str, **kwargs) -> str:
         """OpenRouter APIを使用してテキスト生成"""
@@ -623,42 +596,25 @@ class OpenRouterProvider(ExternalProvider):
         """OpenRouter APIを使用してストリーミング生成"""
         messages = kwargs.get("messages", [{"role": "user", "content": prompt}])
         
-        data = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": kwargs.get("temperature", 0.7),
-            "max_tokens": kwargs.get("max_tokens", 2048),
-            "stream": True
-        }
+        # OpenAIライブラリを使用
+        if not self.openai_client:
+            raise Exception("OpenAI library is not available. Please install it with: pip install openai")
         
         try:
-            req = urllib.request.Request(
-                f"{self.base_url}/chat/completions",
-                data=json.dumps(data).encode('utf-8'),
-                headers=self.headers
+            stream = self.openai_client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=kwargs.get("temperature", 0.7),
+                max_tokens=kwargs.get("max_tokens", 2048),
+                stream=True
             )
             
-            context = ssl.create_default_context()
-            
-            with urllib.request.urlopen(req, context=context) as response:
-                for line in response:
-                    line = line.decode('utf-8').strip()
-                    if line.startswith("data: "):
-                        data_str = line[6:]
-                        if data_str == "[DONE]":
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            if 'choices' in data and len(data['choices']) > 0:
-                                delta = data['choices'][0].get('delta', {})
-                                if 'content' in delta:
-                                    yield delta['content']
-                        except json.JSONDecodeError:
-                            continue
-                            
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
         except Exception as e:
             logger.error(f"OpenRouter streaming failed: {e}")
-            raise
+            yield f"[Error: {str(e)}]"
     
     def get_model_info(self, model_name: Optional[str] = None) -> Dict[str, Any]:
         """モデルの詳細情報を取得（コンテキストサイズを含む）"""
