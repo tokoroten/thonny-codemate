@@ -551,8 +551,8 @@ class SettingsDialog(tk.Toplevel):
                 self.external_model_combo.pack(side="left", fill="x", expand=True)
                 
                 if provider == "chatgpt":
-                    # ChatGPT: 静的なモデルリスト、読み取り専用
-                    self.external_model_combo.config(state="readonly")
+                    # ChatGPT: 静的なモデルリスト、手動入力可能
+                    self.external_model_combo.config(state="normal")
                     from ..utils.constants import ProviderConstants
                     models = ProviderConstants.PROVIDER_MODELS.get(provider, [])
                     
