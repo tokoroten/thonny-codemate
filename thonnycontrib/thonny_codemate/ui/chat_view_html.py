@@ -91,6 +91,11 @@ class LLMChatViewHTML(ttk.Frame):
         # ウィンドウ閉じるイベントをバインド
         self.bind("<Destroy>", self._on_destroy)
         
+        # 入力エリアの自動サイズ調整設定
+        self._min_input_lines = 1
+        self._max_input_lines = 20
+        self._current_input_lines = 3
+        
         # 最後の更新時刻（レート制限用）
         self._last_update_time = 0
         self._update_pending = False
@@ -231,14 +236,18 @@ class LLMChatViewHTML(ttk.Frame):
         input_frame.grid(row=3, column=0, sticky="ew", padx=3, pady=2)
         input_frame.columnconfigure(0, weight=1)
         
-        # 入力テキスト
+        # 入力テキスト（可変高さ）
         self.input_text = tk.Text(
             input_frame,
-            height=3,
+            height=3,  # 初期高さ
             font=("Consolas", 10),
             wrap=tk.WORD
         )
         self.input_text.grid(row=0, column=0, sticky="ew", pady=(0, 2))
+        
+        # テキスト変更時のイベントをバインド
+        self.input_text.bind('<KeyRelease>', self._on_input_text_change)
+        self.input_text.bind('<Control-Return>', lambda e: self._handle_send_button())
         
         # ボタンフレーム
         button_frame = ttk.Frame(input_frame)
@@ -674,6 +683,9 @@ class LLMChatViewHTML(ttk.Frame):
         
         # UIをクリア
         self.input_text.delete("1.0", tk.END)
+        # 入力エリアの高さをリセット
+        self._current_input_lines = 3
+        self.input_text.config(height=3)
         
         # Edit modeの場合は特別な処理
         if self.mode_var.get() == "edit":
@@ -1099,6 +1111,9 @@ Full file content:
         
         # プロンプトを入力して送信
         self.input_text.delete("1.0", tk.END)
+        # 入力エリアの高さをリセット
+        self._current_input_lines = 3
+        self.input_text.config(height=3)
         self.input_text.insert("1.0", message)
         self._send_message()
     
@@ -1154,6 +1169,9 @@ Full file content:
             prompt = self._build_error_explanation_prompt(error_message, code)
             
             self.input_text.delete("1.0", tk.END)
+            # 入力エリアの高さをリセット
+            self._current_input_lines = 3
+            self.input_text.config(height=3)
             self.input_text.insert("1.0", prompt)
             self._send_message()
             
@@ -1367,6 +1385,37 @@ Full file content:
         else:
             # Chat modeに戻る
             self.context_check.config(state=tk.NORMAL)
+    
+    def _on_input_text_change(self, event=None):
+        """入力テキスト変更時の処理（高さ自動調整）"""
+        try:
+            # 現在のテキスト内容を取得
+            content = self.input_text.get("1.0", "end-1c")
+            
+            # 行数を計算（空行も含む）
+            lines = content.split('\n')
+            
+            # 各行の折り返しを考慮した実際の表示行数を計算
+            total_lines = 0
+            for line in lines:
+                if line:
+                    # 1行の文字数から表示行数を推定（約80文字で1行）
+                    line_width = len(line)
+                    display_lines = max(1, (line_width + 79) // 80)
+                    total_lines += display_lines
+                else:
+                    total_lines += 1
+            
+            # 最小値と最大値の範囲内に収める
+            new_height = max(self._min_input_lines, min(total_lines, self._max_input_lines))
+            
+            # 高さが変わった場合のみ更新
+            if new_height != self._current_input_lines:
+                self._current_input_lines = new_height
+                self.input_text.config(height=new_height)
+                
+        except Exception as e:
+            logger.error(f"Error adjusting input text height: {e}")
     
     def _toggle_context(self):
         """コンテキストの有効/無効を切り替え"""
