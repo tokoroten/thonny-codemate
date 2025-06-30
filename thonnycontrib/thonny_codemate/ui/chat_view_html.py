@@ -1017,6 +1017,11 @@ Full file content:
         # 通常の完了処理
         self._handle_completion()
         
+        # 中止された場合のチェック
+        if self._stop_generation:
+            self._add_message("system", tr("⚠️ Edit generation was stopped. Changes were not applied."))
+            return
+        
         # コードブロックを抽出
         new_code = self.edit_mode_handler.extract_code_block(full_response)
         
@@ -1309,7 +1314,7 @@ Full file content:
         
         self._processing = True
         self._stop_generation = False
-        self.send_button.config(state=tk.DISABLED)
+        self.send_button.config(text=tr("Stop"), state=tk.NORMAL)  # Stop ボタンを有効化
         
         # ストリーミングの準備
         self._start_generating_animation()
@@ -1330,7 +1335,8 @@ Full file content:
                 full_response = ""
                 for token in llm_client.generate_stream(prompt):
                     if self._stop_generation:
-                        self.message_queue.put(("complete", None))
+                        # 中止された場合もedit_completeを送信（部分的な応答で処理）
+                        self.message_queue.put(("edit_complete", full_response))
                         return
                     full_response += token
                     self.message_queue.put(("token", token))
