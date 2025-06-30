@@ -160,7 +160,7 @@ class SettingsDialog(tk.Toplevel):
         self.model_path_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
         # エントリーフィールドのツールチップ設定
-        self._create_dynamic_tooltip(self.model_path_entry)
+        self._create_tooltip(self.model_path_entry, dynamic=True)
         ttk.Button(
             path_frame,
             text=tr("Browse..."),
@@ -532,23 +532,8 @@ class SettingsDialog(tk.Toplevel):
                 self.external_model_combo.pack(side="left", fill="x", expand=True)
                 
                 # モデルリストを更新
-                if provider == "chatgpt":
-                    models = [
-                        "gpt-4o",
-                        "gpt-4o-mini",
-                        "gpt-4-turbo",
-                        "gpt-4",
-                        "o1-preview",
-                        "o1-mini"
-                    ]
-                else:  # openrouter
-                    models = [
-                        "meta-llama/llama-3.2-3b-instruct:free",
-                        "meta-llama/llama-3.2-1b-instruct:free",
-                        "google/gemini-2.0-flash-exp:free",
-                        "anthropic/claude-3.5-sonnet",
-                        "openai/gpt-4o"
-                    ]
+                from ..utils.constants import ProviderConstants
+                models = ProviderConstants.PROVIDER_MODELS.get(provider, [])
                 
                 self.external_model_combo['values'] = models
                 if self.external_model_var.get() not in models:
@@ -672,12 +657,8 @@ class SettingsDialog(tk.Toplevel):
                     logger.error(f"Test connection error: {e}\n{error_details}")
                     
                     # ユーザーフレンドリーなエラーメッセージ
-                    if "connection" in str(e).lower() or "urlopen" in str(e).lower():
-                        user_error = tr("Cannot connect to server. Please check if the service is running.")
-                    elif "api key" in str(e).lower() or "401" in str(e):
-                        user_error = tr("Invalid API key. Please check your API key.")
-                    else:
-                        user_error = str(e)
+                    from ..utils.error_messages import format_api_error
+                    user_error = format_api_error(provider, e)
                     
                     self.after(0, lambda: self._show_test_result({
                         "success": False,
@@ -754,10 +735,10 @@ class SettingsDialog(tk.Toplevel):
         # 詳細設定
         # プロバイダーに応じて適切なAPIキーを読み込む
         provider = self.provider_var.get()
-        if provider == "chatgpt":
-            self.api_key_var.set(self.workbench.get_option("llm.chatgpt_api_key", ""))
-        elif provider == "openrouter":
-            self.api_key_var.set(self.workbench.get_option("llm.openrouter_api_key", ""))
+        from ..utils.constants import ProviderConstants
+        api_key_option = ProviderConstants.API_KEY_OPTIONS.get(provider)
+        if api_key_option:
+            self.api_key_var.set(self.workbench.get_option(api_key_option, ""))
         else:
             self.api_key_var.set("")
             
@@ -838,10 +819,9 @@ class SettingsDialog(tk.Toplevel):
         self.workbench.set_option("llm.repeat_penalty", self.repeat_penalty_var.get())
         
         # プロバイダーに応じて適切なAPIキーを保存
-        if provider == "chatgpt":
-            self.workbench.set_option("llm.chatgpt_api_key", self.api_key_var.get())
-        elif provider == "openrouter":
-            self.workbench.set_option("llm.openrouter_api_key", self.api_key_var.get())
+        api_key_option = ProviderConstants.API_KEY_OPTIONS.get(provider)
+        if api_key_option:
+            self.workbench.set_option(api_key_option, self.api_key_var.get())
             
         self.workbench.set_option("llm.base_url", self.base_url_var.get())
         self.workbench.set_option("llm.external_model", self.external_model_var.get())
@@ -1015,15 +995,30 @@ class SettingsDialog(tk.Toplevel):
             self.external_model_combo['values'] = []
             self.external_model_var.set("")
     
-    def _create_tooltip(self, widget, text):
-        """ツールチップを作成"""
+    def _create_tooltip(self, widget, text=None, dynamic=False):
+        """静的または動的なツールチップを作成
+        
+        Args:
+            widget: ツールチップを追加するウィジェット
+            text: 静的ツールチップのテキスト（dynamicがFalseの場合に使用）
+            dynamic: Trueの場合、ウィジェットのget()メソッドから動的にテキストを取得
+        """
         def on_enter(event):
-            tooltip = tk.Toplevel()
-            tooltip.wm_overrideredirect(True)
-            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
-            label = ttk.Label(tooltip, text=text, relief="solid", borderwidth=1)
-            label.pack()
-            widget.tooltip = tooltip
+            # ツールチップテキストを決定
+            tooltip_text = None
+            if dynamic and hasattr(widget, 'get'):
+                tooltip_text = widget.get()
+            else:
+                tooltip_text = text
+            
+            # テキストがある場合のみツールチップを表示
+            if tooltip_text:
+                tooltip = tk.Toplevel()
+                tooltip.wm_overrideredirect(True)
+                tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+                label = ttk.Label(tooltip, text=tooltip_text, relief="solid", borderwidth=1)
+                label.pack()
+                widget.tooltip = tooltip
         
         def on_leave(event):
             if hasattr(widget, 'tooltip'):
@@ -1034,27 +1029,7 @@ class SettingsDialog(tk.Toplevel):
         widget.bind("<Leave>", on_leave)
     
     
-    def _create_dynamic_tooltip(self, widget):
-        """エントリーフィールドの内容を表示する動的ツールチップを作成"""
-        def on_enter(event):
-            # エントリーの内容を取得
-            if hasattr(widget, 'get'):
-                text = widget.get()
-                if text:
-                    tooltip = tk.Toplevel()
-                    tooltip.wm_overrideredirect(True)
-                    tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
-                    label = ttk.Label(tooltip, text=text, relief="solid", borderwidth=1)
-                    label.pack()
-                    widget.tooltip = tooltip
-        
-        def on_leave(event):
-            if hasattr(widget, 'tooltip'):
-                widget.tooltip.destroy()
-                del widget.tooltip
-        
-        widget.bind("<Enter>", on_enter)
-        widget.bind("<Leave>", on_leave)
+    # _create_dynamic_tooltipは_create_tooltipに統合されたため削除
     
     def _get_model_max_context_size(self, provider: str, model_name: str = "") -> int:
         """モデルの最大コンテキストサイズを取得"""

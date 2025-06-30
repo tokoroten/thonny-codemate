@@ -864,14 +864,8 @@ Based on this context, {message}"""
             error_details = traceback.format_exc()
             logger.error(f"Error generating response: {e}\n{error_details}")
             # ユーザーフレンドリーなエラーメッセージ
-            if "connection" in str(e).lower():
-                user_message = tr("Connection error. Please check your network and API settings.")
-            elif "api key" in str(e).lower():
-                user_message = tr("API key error. Please check your API key in settings.")
-            elif "model" in str(e).lower():
-                user_message = tr("Model error. The selected model may not be available.")
-            else:
-                user_message = f"{tr('Error generating response')}: {str(e)}"
+            from ..utils.error_messages import get_user_friendly_error_message
+            user_message = get_user_friendly_error_message(e, "generating response")
             self.message_queue.put(("error", user_message))
     
     def _process_queue(self):

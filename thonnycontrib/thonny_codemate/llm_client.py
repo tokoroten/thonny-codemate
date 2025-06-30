@@ -214,46 +214,8 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
                 if filename:
                     file_ext = Path(filename).suffix.lower()
                     # ファイル拡張子から言語を判定
-                    language_map = {
-                        '.py': 'Python',
-                        '.pyw': 'Python',
-                        '.js': 'JavaScript',
-                        '.ts': 'TypeScript',
-                        '.java': 'Java',
-                        '.c': 'C',
-                        '.cpp': 'C++',
-                        '.cc': 'C++',
-                        '.cxx': 'C++',
-                        '.h': 'C/C++',
-                        '.hpp': 'C++',
-                        '.cs': 'C#',
-                        '.rb': 'Ruby',
-                        '.go': 'Go',
-                        '.rs': 'Rust',
-                        '.php': 'PHP',
-                        '.html': 'HTML',
-                        '.htm': 'HTML',
-                        '.css': 'CSS',
-                        '.xml': 'XML',
-                        '.json': 'JSON',
-                        '.yaml': 'YAML',
-                        '.yml': 'YAML',
-                        '.md': 'Markdown',
-                        '.sh': 'Shell/Bash',
-                        '.bash': 'Bash',
-                        '.r': 'R',
-                        '.sql': 'SQL',
-                        '.swift': 'Swift',
-                        '.kt': 'Kotlin',
-                        '.scala': 'Scala',
-                        '.lua': 'Lua',
-                        '.pl': 'Perl',
-                        '.m': 'MATLAB/Objective-C',
-                        '.vb': 'Visual Basic',
-                        '.dart': 'Dart',
-                        '.jl': 'Julia'
-                    }
-                    return language_map.get(file_ext, 'Python')  # デフォルトはPython
+                    from .utils.constants import LANGUAGE_EXTENSIONS
+                    return LANGUAGE_EXTENSIONS.get(file_ext, 'Python')  # デフォルトはPython
         except Exception:
             pass
         
@@ -630,38 +592,86 @@ Remember: Prioritize clarity and brevity. Get straight to the solution."""
         kwargs_without_messages = {k: v for k, v in kwargs.items() if k != "messages"}
         params.update(kwargs_without_messages)
         
-        # フルプロンプトを作成
-        # 会話履歴がある場合は、それを含めたプロンプトを作成
+        # 会話履歴がある場合は、chat completion APIを使用
         if "messages" in kwargs:
-            # 会話履歴を含むプロンプトを構築
-            conversation_parts = []
+            # メッセージリストを構築
+            messages = []
             
-            # システムプロンプト
-            conversation_parts.append(self._build_system_prompt())
+            # システムプロンプトを追加
+            system_prompt = self._build_system_prompt()
+            messages.append({"role": "system", "content": system_prompt})
             
-            # 既存の会話履歴
+            # 既存の会話履歴を追加
             for msg in kwargs["messages"]:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                if role == "user":
-                    conversation_parts.append(f"\nUser: {content}")
-                elif role == "assistant":
-                    conversation_parts.append(f"\nAssistant: {content}")
+                if msg.get("role") != "system":  # システムプロンプトは既に追加済み
+                    messages.append(msg)
             
-            # 現在のメッセージ
-            conversation_parts.append(f"\nUser: {prompt}")
-            conversation_parts.append("\nAssistant: ")
+            # 現在のメッセージを追加
+            messages.append({"role": "user", "content": prompt})
             
-            full_prompt = "\n".join(conversation_parts)
+            # Chat completion APIを使用（llama-cpp-pythonがサポートしている場合）
+            try:
+                # create_chat_completionメソッドが利用可能か確認
+                if hasattr(self._model, 'create_chat_completion'):
+                    # stopパラメータを調整（chat completion用）
+                    params_for_chat = params.copy()
+                    params_for_chat['stop'] = ["</s>"]  # chat completion用のストップトークン
+                    
+                    for output in self._model.create_chat_completion(messages, **params_for_chat):
+                        if "choices" in output and len(output["choices"]) > 0:
+                            delta = output["choices"][0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                yield content
+                else:
+                    # フォールバック: 従来の方法でプロンプトを構築
+                    full_prompt = self._format_messages_as_prompt(messages)
+                    for output in self._model(full_prompt, **params):
+                        token = output["choices"][0]["text"]
+                        if token:
+                            yield token
+            except Exception as e:
+                logger.warning(f"Chat completion failed, falling back to text completion: {e}")
+                # エラー時のフォールバック
+                full_prompt = self._format_messages_as_prompt(messages)
+                for output in self._model(full_prompt, **params):
+                    token = output["choices"][0]["text"]
+                    if token:
+                        yield token
         else:
             # 従来の単一プロンプト形式
             full_prompt = self._format_prompt(prompt)
+            for output in self._model(full_prompt, **params):
+                token = output["choices"][0]["text"]
+                if token:
+                    yield token
+    
+    def _format_messages_as_prompt(self, messages: list) -> str:
+        """
+        OpenAI形式のメッセージリストをプロンプト文字列に変換
         
-        # ストリーミング生成
-        for output in self._model(full_prompt, **params):
-            token = output["choices"][0]["text"]
-            if token:
-                yield token
+        Args:
+            messages: [{"role": "system/user/assistant", "content": "..."}, ...]
+            
+        Returns:
+            フォーマットされたプロンプト文字列
+        """
+        parts = []
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            
+            if role == "system":
+                parts.append(content)
+            elif role == "user":
+                parts.append(f"\n\nHuman: {content}")
+            elif role == "assistant":
+                parts.append(f"\n\nAssistant: {content}")
+        
+        # 最後にアシスタントの応答を促す
+        parts.append("\n\nAssistant:")
+        
+        return "".join(parts)
     
     def set_system_prompt(self, prompt: str):
         """カスタムシステムプロンプトを設定"""
