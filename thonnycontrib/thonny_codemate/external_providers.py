@@ -224,153 +224,60 @@ class ChatGPTProvider(ExternalProvider):
 
 
 class OllamaProvider(ExternalProvider):
-    """Ollama/LM Studio APIプロバイダー"""
+    """Ollama/LM Studio APIプロバイダー（OpenAI互換）"""
     
     def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3"):
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.headers = {"Content-Type": "application/json"}
         
-        # OpenAI client (Ollama and LM Studio are both OpenAI compatible)
+        # OpenAI client - both Ollama and LM Studio support OpenAI compatible API
         self.openai_client = None
         if OPENAI_AVAILABLE:
             try:
-                # OllamaもLM StudioもOpenAI互換API
+                # Determine API base URL
+                if base_url.endswith('/v1'):
+                    api_base = base_url
+                else:
+                    api_base = f"{self.base_url}/v1"
+                
                 self.openai_client = OpenAI(
-                    api_key="ollama",  # Ollama/LM Studio don't require real API key
-                    base_url=f"{self.base_url}/v1"
+                    api_key="not-needed",  # Ollama/LM Studio don't require real API key
+                    base_url=api_base
                 )
-                logger.info("Using OpenAI library for Ollama/LM Studio")
+                logger.info(f"Initialized OpenAI client for {base_url} with API base: {api_base}")
             except Exception as e:
                 logger.warning(f"Failed to initialize OpenAI client: {e}")
     
-    def _detect_server_type(self):
-        """サーバータイプを検出（Ollama or LM Studio）"""
-        if self.is_lmstudio is not None:
-            return self.is_lmstudio
-        
-        # ポート番号からの初期推測を使用
-        if self._port_suggests_lmstudio:
-            # LM Studioの可能性が高い場合、OpenAI互換APIをチェック
-            try:
-                req = urllib.request.Request(f"{self.base_url}/v1/models")
-                with urllib.request.urlopen(req, timeout=1) as response:
-                    data = json.loads(response.read().decode('utf-8'))
-                    if 'data' in data:  # OpenAI互換レスポンス
-                        self.is_lmstudio = True
-                        logger.debug("Detected LM Studio server")
-                        return True
-            except:
-                pass
-        
-        # Ollama APIをチェック
-        try:
-            req = urllib.request.Request(f"{self.base_url}/api/tags")
-            with urllib.request.urlopen(req, timeout=1) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                if 'models' in data:  # Ollamaレスポンス
-                    self.is_lmstudio = False
-                    logger.debug("Detected Ollama server")
-                    return False
-        except:
-            pass
-        
-        # デフォルトはポート番号からの推測を使用
-        self.is_lmstudio = self._port_suggests_lmstudio
-        return self.is_lmstudio
-    
-    def _build_prompt_from_messages(self, messages: list) -> str:
-        """メッセージリストからOllama用のプロンプトを構築"""
-        prompt_parts = []
-        
-        for msg in messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            
-            if role == "system":
-                prompt_parts.append(f"System: {content}")
-            elif role == "user":
-                prompt_parts.append(f"\nUser: {content}")
-            elif role == "assistant":
-                prompt_parts.append(f"\nAssistant: {content}")
-        
-        # 最後にアシスタントの応答を促す
-        prompt_parts.append("\nAssistant: ")
-        
-        return "\n".join(prompt_parts)
     
     def generate(self, prompt: str, **kwargs) -> str:
-        """Ollama/LM Studio APIを使用してテキスト生成"""
-        if self._detect_server_type():
-            # LM StudioはOpenAI互換API
-            messages = kwargs.get("messages", [])
-            if not messages:
-                messages = [{"role": "user", "content": prompt}]
-            
-            data = {
-                "model": self.model,
-                "messages": messages,
-                "temperature": kwargs.get("temperature", 0.7),
-                "max_tokens": kwargs.get("max_tokens", 2048),
-                "stream": False
-            }
-            
-            try:
-                req = urllib.request.Request(
-                    f"{self.base_url}/v1/chat/completions",
-                    data=json.dumps(data).encode('utf-8'),
-                    headers=self.headers
-                )
-                
-                with urllib.request.urlopen(req) as response:
-                    result = json.loads(response.read().decode('utf-8'))
-                    return result['choices'][0]['message']['content']
-                    
-            except Exception as e:
-                logger.error(f"LM Studio request failed: {e}")
-                raise
-        else:
-            # Ollama API
-            # messagesパラメータがある場合は会話履歴を含める
-            messages = kwargs.get("messages", [])
-            if messages:
-                # システムメッセージとユーザーメッセージを含む完全なプロンプトを構築
-                full_prompt = self._build_prompt_from_messages(messages)
-            else:
-                full_prompt = prompt
-                
-            data = {
-                "model": self.model,
-                "prompt": full_prompt,
-                "stream": False,
-                "options": {
-                    "temperature": kwargs.get("temperature", 0.7),
-                    "num_predict": kwargs.get("max_tokens", 2048),
-                }
-            }
-            
-            try:
-                req = urllib.request.Request(
-                    f"{self.base_url}/api/generate",
-                    data=json.dumps(data).encode('utf-8'),
-                    headers=self.headers
-                )
-                
-                with urllib.request.urlopen(req) as response:
-                    result = json.loads(response.read().decode('utf-8'))
-                    return result['response']
-                    
-            except Exception as e:
-                logger.error(f"Ollama request failed: {e}")
-                raise
-    
-    def generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
-        """Ollama/LM Studio APIを使用してストリーミング生成"""
+        """テキスト生成（非ストリーミング）"""
         messages = kwargs.get("messages", [])
         if not messages:
             messages = [{"role": "user", "content": prompt}]
         
-        # OpenAIライブラリを使用
+        if not self.openai_client:
+            raise Exception("OpenAI library is not available. Please install it with: pip install openai")
+        
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=kwargs.get("temperature", 0.7),
+                max_tokens=kwargs.get("max_tokens", 2048),
+                stream=False
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Failed to generate: {e}")
+            raise
+    
+    def generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        """ストリーミング生成"""
+        messages = kwargs.get("messages", [])
+        if not messages:
+            messages = [{"role": "user", "content": prompt}]
+        
         if not self.openai_client:
             raise Exception("OpenAI library is not available. Please install it with: pip install openai")
         
@@ -387,109 +294,78 @@ class OllamaProvider(ExternalProvider):
                 if chunk.choices[0].delta.content is not None:
                     yield chunk.choices[0].delta.content
         except Exception as e:
-            logger.error(f"Ollama/LM Studio streaming failed: {e}")
+            logger.error(f"Streaming failed: {e}")
             yield f"[Error: {str(e)}]"
     
     @retry_network_operation
     def get_models(self) -> list[str]:
-        """利用可能なモデルのリストを取得（リトライ付き）"""
+        """利用可能なモデルのリストを取得"""
         try:
-            if self._detect_server_type():
-                # LM StudioはOpenAI互換API
-                req = urllib.request.Request(f"{self.base_url}/v1/models")
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    data = json.loads(response.read().decode('utf-8'))
-                    models = [m['id'] for m in data.get('data', [])]
-                    return models
+            if self.openai_client:
+                models = self.openai_client.models.list()
+                return [m.id for m in models.data]
             else:
-                # Ollama API
+                # Fallback: Try Ollama native API if OpenAI client not available
                 req = urllib.request.Request(f"{self.base_url}/api/tags")
                 with urllib.request.urlopen(req, timeout=5) as response:
                     data = json.loads(response.read().decode('utf-8'))
-                    models = [m['name'] for m in data.get('models', [])]
-                    return models
+                    return [m['name'] for m in data.get('models', [])]
         except Exception as e:
             logger.error(f"Failed to fetch models: {e}")
             return []
     
     def get_model_info(self, model_name: Optional[str] = None) -> Dict[str, Any]:
-        """モデルの詳細情報を取得（コンテキストサイズを含む）"""
+        """モデルの詳細情報を取得"""
         model = model_name or self.model
         
         try:
-            if self._detect_server_type():
-                # LM Studio: /api/v0/models エンドポイントを使用
-                req = urllib.request.Request(f"{self.base_url}/api/v0/models")
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    result = json.loads(response.read().decode('utf-8'))
-                    
-                    # 指定されたモデルを検索
-                    for model_data in result:
-                        if model_data.get('id') == model or model_data.get('name') == model:
-                            max_context_length = model_data.get('max_context_length')
+            # Try OpenAI compatible endpoint first
+            if self.openai_client:
+                try:
+                    models = self.openai_client.models.list()
+                    for model_data in models.data:
+                        if model_data.id == model:
+                            # Extract context size from various possible fields
+                            context_size = None
+                            for attr in ['context_window', 'context_length', 'max_context_length']:
+                                if hasattr(model_data, attr):
+                                    context_size = getattr(model_data, attr)
+                                    if context_size:
+                                        break
+                            
                             return {
-                                "context_size": max_context_length,
-                                "model_data": model_data
+                                "context_size": context_size,
+                                "model_data": model_data.model_dump() if hasattr(model_data, 'model_dump') else model_data
                             }
-                    
-                    # モデルが見つからない場合
-                    available_models = [m.get('id', m.get('name', 'unknown')) for m in result]
-                    return {
-                        "context_size": None,
-                        "error": f"Model '{model}' not found in LM Studio models",
-                        "available_models": available_models
-                    }
-            else:
-                # Ollama: /api/show エンドポイントを使用
-                data = {"name": model}
-                req = urllib.request.Request(
-                    f"{self.base_url}/api/show",
-                    data=json.dumps(data).encode('utf-8'),
-                    headers=self.headers
-                )
+                except Exception as e:
+                    logger.debug(f"OpenAI API model info failed, trying native API: {e}")
+            
+            # Fallback: Ollama native API
+            data = {"name": model}
+            req = urllib.request.Request(
+                f"{self.base_url}/api/show",
+                data=json.dumps(data).encode('utf-8'),
+                headers=self.headers
+            )
+            
+            with urllib.request.urlopen(req, timeout=10) as response:
+                result = json.loads(response.read().decode('utf-8'))
                 
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    result = json.loads(response.read().decode('utf-8'))
-                    
-                    # モデル情報からコンテキストサイズを取得
-                    model_info = result.get('model_info', {})
-                    parameters = result.get('parameters', '')
-                    template = result.get('template', '')
-                    
-                    # さまざまな場所からコンテキストサイズを探す
-                    context_size = None
-                    
-                    # 1. model_info内のコンテキストサイズ
-                    if isinstance(model_info, dict):
-                        for key in ['context_length', 'max_position_embeddings', 'n_ctx']:
-                            if key in model_info:
-                                context_size = model_info[key]
-                                break
-                    
-                    # 2. parametersからnum_ctxを探す
-                    if context_size is None and parameters:
-                        # parametersは文字列形式で "num_ctx 4096" のような形式
-                        import re
-                        match = re.search(r'num_ctx\s+(\d+)', parameters)
-                        if match:
-                            context_size = int(match.group(1))
-                    
-                    # 3. templateからコンテキストサイズのヒントを探す
-                    if context_size is None and template:
-                        # 一部のモデルではtemplateにヒントがある場合がある
-                        if '128k' in template.lower() or '128000' in template:
-                            context_size = 128000
-                        elif '32k' in template.lower() or '32768' in template:
-                            context_size = 32768
-                        elif '8k' in template.lower() or '8192' in template:
-                            context_size = 8192
-                    
-                    return {
-                        "context_size": context_size,
-                        "model_info": model_info,
-                        "parameters": parameters,
-                        "template": template
-                    }
+                # Extract context size from parameters
+                parameters = result.get('parameters', '')
+                context_size = 2048  # default
+                
+                if parameters:
+                    import re
+                    match = re.search(r'num_ctx\s+(\d+)', parameters)
+                    if match:
+                        context_size = int(match.group(1))
+                
+                return {
+                    "context_size": context_size,
+                    "model_data": result
+                }
+                
         except Exception as e:
             logger.error(f"Failed to get model info for {model}: {e}")
             return {"context_size": None, "error": str(e)}
@@ -497,29 +373,44 @@ class OllamaProvider(ExternalProvider):
     def test_connection(self) -> Dict[str, Any]:
         """接続テスト"""
         try:
-            # モデルリストを取得してテスト
+            # Get available models
             models = self.get_models()
             
-            if models:
-                return {
-                    "success": True,
-                    "provider": "Ollama",
-                    "base_url": self.base_url,
-                    "available_models": models,
-                    "current_model": self.model
-                }
-            else:
+            if not models:
                 return {
                     "success": False,
-                    "provider": "Ollama",
+                    "provider": "Ollama/LM Studio",
                     "base_url": self.base_url,
-                    "error": "No models found or connection failed"
+                    "error": "No models found"
                 }
+            
+            # Try a simple completion
+            test_model = self.model if self.model in models else models[0]
+            
+            if self.openai_client:
+                response = self.openai_client.chat.completions.create(
+                    model=test_model,
+                    messages=[{"role": "user", "content": "Say 'Hello' in one word."}],
+                    max_tokens=10
+                )
+                response_text = response.choices[0].message.content
+            else:
+                response_text = self.generate("Say 'Hello' in one word.", max_tokens=10)
+            
+            return {
+                "success": True,
+                "provider": "Ollama/LM Studio",
+                "base_url": self.base_url,
+                "model": test_model,
+                "available_models": models,
+                "response": response_text
+            }
         except Exception as e:
             return {
                 "success": False,
-                "provider": "Ollama",
+                "provider": "Ollama/LM Studio",
                 "base_url": self.base_url,
+                "model": self.model,
                 "error": str(e)
             }
 
