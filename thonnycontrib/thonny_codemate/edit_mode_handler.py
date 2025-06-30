@@ -110,17 +110,39 @@ Focus your changes primarily on the selected region, but you may modify other pa
     
     def extract_code_block(self, response: str) -> Optional[str]:
         """Extract the first code block from LLM response"""
-        # Pattern to match code blocks with optional language specifier
-        pattern = r'```(?:\w+)?\s*\n(.*?)```'
-        matches = re.findall(pattern, response, re.DOTALL)
+        lines = response.split('\n')
+        in_code_block = False
+        code_lines = []
+        block_delimiter_count = 0
         
-        if matches:
-            return matches[0].strip()
+        for i, line in enumerate(lines):
+            # Check for code block delimiter at the start of line
+            if line.strip().startswith('```'):
+                if not in_code_block:
+                    # Starting a code block
+                    in_code_block = True
+                    block_delimiter_count = 1
+                    # Skip the opening delimiter line
+                    continue
+                else:
+                    # Check if this could be the closing delimiter
+                    # It should be just ``` with nothing else (except whitespace)
+                    if line.strip() == '```':
+                        # This is the closing delimiter
+                        break
+                    else:
+                        # This is content inside the code block that happens to start with ```
+                        code_lines.append(line)
+            elif in_code_block:
+                code_lines.append(line)
+        
+        if code_lines:
+            return '\n'.join(code_lines).strip()
         
         # If no code block found, check if the entire response might be code
         # (sometimes LLMs return code without backticks)
-        lines = response.strip().split('\n')
-        if len(lines) > 3 and any(line.strip().startswith(('def ', 'class ', 'import ', 'from ')) for line in lines):
+        lines_stripped = response.strip().split('\n')
+        if len(lines_stripped) > 3 and any(line.strip().startswith(('def ', 'class ', 'import ', 'from ')) for line in lines_stripped):
             return response.strip()
             
         return None
