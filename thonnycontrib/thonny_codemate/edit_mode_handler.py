@@ -37,7 +37,11 @@ Language: {language}
 
 User request: {user_prompt}
 
-Please provide the {code_instruction}. Start your response with a code block containing the {output_type}:
+Please provide the {code_instruction}. Your response MUST start with a markdown code block using triple backticks (```) containing the {output_type}:
+
+```{language}
+# Your code here
+```
 """
 
     SELECTION_TEMPLATE = """Selected region (lines {start_line}-{end_line}):
@@ -136,13 +140,16 @@ Focus your changes primarily on the selected region, but you may modify other pa
             stripped = line.strip()
             if stripped.startswith('```'):
                 start_index = i
+                logger.debug(f"Found opening fence at line {i}: {stripped}")
                 break
         
         if start_index == -1:
             # No code block found, check if the entire response might be code
             lines_stripped = response.strip().split('\n')
             if len(lines_stripped) > 3 and any(line.strip().startswith(('def ', 'class ', 'import ', 'from ')) for line in lines_stripped):
+                logger.debug("No fence found, but response looks like code")
                 return response.strip()
+            logger.debug("No code block found in response")
             return None
         
         # Find the last fence (searching from the end)
@@ -151,10 +158,12 @@ Focus your changes primarily on the selected region, but you may modify other pa
             stripped = lines[i].strip()
             if stripped.startswith('```'):
                 end_index = i
+                logger.debug(f"Found closing fence at line {i}: {stripped}")
                 break
         
         if end_index == -1 or end_index <= start_index:
             # No closing fence found
+            logger.debug(f"No valid closing fence found. end_index={end_index}, start_index={start_index}")
             return None
         
         # Extract code between fences

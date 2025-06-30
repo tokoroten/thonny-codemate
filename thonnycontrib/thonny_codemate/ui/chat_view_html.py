@@ -1026,6 +1026,9 @@ Full file content:
         new_code = self.edit_mode_handler.extract_code_block(full_response)
         
         if not new_code:
+            # デバッグ情報をログに出力
+            logger.warning(f"Failed to extract code block from response. Response length: {len(full_response)}")
+            logger.debug(f"Response preview: {full_response[:500]}...")
             self._add_message("system", tr("No code changes were generated. Please try rephrasing your request."))
             return
         
