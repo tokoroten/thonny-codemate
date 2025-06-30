@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 logger.disabled = True
 
 # プラグインのバージョン
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 # グローバル変数でプラグインの状態を管理
 _plugin_loaded = False

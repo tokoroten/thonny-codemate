@@ -105,6 +105,9 @@ class LLMChatViewHTML(ttk.Frame):
         
         # 会話履歴を読み込む
         self._load_chat_history()
+        
+        # EditModeHandlerを初期化
+        self.edit_mode_handler = None
     
     def _show_fallback_ui(self):
         """tkinterwebが利用できない場合のフォールバックUI"""
@@ -248,6 +251,27 @@ class LLMChatViewHTML(ttk.Frame):
     
     def _create_buttons(self, button_frame):
         """ボタン類を作成"""
+        # モード選択フレーム
+        mode_frame = ttk.LabelFrame(button_frame, text=tr("Mode"), padding=2)
+        mode_frame.pack(side=tk.LEFT, padx=5)
+        
+        self.mode_var = tk.StringVar(value="chat")
+        ttk.Radiobutton(
+            mode_frame,
+            text=tr("Chat"),
+            variable=self.mode_var,
+            value="chat",
+            command=self._on_mode_change
+        ).pack(side=tk.LEFT, padx=2)
+        
+        ttk.Radiobutton(
+            mode_frame,
+            text=tr("Edit"),
+            variable=self.mode_var,
+            value="edit",
+            command=self._on_mode_change
+        ).pack(side=tk.LEFT, padx=2)
+        
         # Sendボタン
         self.send_button = ttk.Button(
             button_frame,
@@ -651,6 +675,12 @@ class LLMChatViewHTML(ttk.Frame):
         # UIをクリア
         self.input_text.delete("1.0", tk.END)
         
+        # Edit modeの場合は特別な処理
+        if self.mode_var.get() == "edit":
+            self._handle_edit_mode(message)
+            return
+        
+        # Chat mode（通常の処理）
         # コンテキスト情報を取得して表示メッセージを作成
         context_info = self._get_context_info()
         display_message = self._format_display_message(message, context_info)
@@ -913,6 +943,8 @@ Full file content:
                     self._handle_token(content)
                 elif msg_type == "complete":
                     self._handle_completion()
+                elif msg_type == "edit_complete":
+                    self._handle_edit_completion(content)
                 elif msg_type == "error":
                     self._handle_error(content)
                 elif msg_type == "info":
@@ -979,6 +1011,51 @@ Full file content:
         # 停止された場合のみ停止メッセージを追加
         if self._stop_generation:
             self._add_message("system", tr("[Generation stopped by user]"))
+    
+    def _handle_edit_completion(self, full_response: str):
+        """Edit mode完了時の処理"""
+        # 通常の完了処理
+        self._handle_completion()
+        
+        # コードブロックを抽出
+        new_code = self.edit_mode_handler.extract_code_block(full_response)
+        
+        if not new_code:
+            self._add_message("system", tr("No code changes were generated. Please try rephrasing your request."))
+            return
+        
+        # エディタを取得
+        workbench = get_workbench()
+        editor = workbench.get_editor_notebook().get_current_editor()
+        if not editor:
+            self._add_message("system", tr("Editor was closed. Cannot apply changes."))
+            return
+        
+        # 現在のコードを取得
+        text_widget = editor.get_text_widget()
+        original_code = text_widget.get("1.0", tk.END).strip()
+        
+        # "# ...existing code..." マーカーを展開
+        try:
+            expanded_code = self.edit_mode_handler.expand_existing_code_markers(new_code, original_code)
+        except Exception as e:
+            logger.error(f"Failed to expand code markers: {e}")
+            expanded_code = new_code  # フォールバック
+        
+        # 差分を作成して表示（オプション）
+        diff_lines = self.edit_mode_handler.create_diff(original_code, expanded_code)
+        
+        # 変更を適用
+        if self.edit_mode_handler.apply_edit(editor, expanded_code):
+            self._add_message("system", tr("✅ Changes applied successfully!"))
+            
+            # 差分のサマリーを表示
+            added = sum(1 for line in diff_lines if line.startswith('+') and not line.startswith('+++'))
+            removed = sum(1 for line in diff_lines if line.startswith('-') and not line.startswith('---'))
+            if added or removed:
+                self._add_message("system", f"📊 {added} lines added, {removed} lines removed")
+        else:
+            self._add_message("system", tr("❌ Failed to apply changes."))
     
     def _handle_error(self, error_message: str):
         """エラーを処理"""
@@ -1193,6 +1270,97 @@ Full file content:
         self._update_html(full_reload=True)  # クリア時は全体再読み込み
         # 履歴もクリア
         self._save_chat_history()
+    
+    def _handle_edit_mode(self, user_prompt: str):
+        """Edit modeでのメッセージ処理"""
+        # エディタの情報を取得
+        workbench = get_workbench()
+        editor = workbench.get_editor_notebook().get_current_editor()
+        if not editor:
+            self._add_message("system", tr("No active editor. Please open a file to edit."))
+            return
+        
+        # ファイル情報を取得
+        filename = editor.get_filename() or "Untitled"
+        text_widget = editor.get_text_widget()
+        content = text_widget.get("1.0", tk.END).strip()
+        
+        if not content:
+            self._add_message("system", tr("The editor is empty. Please write some code first."))
+            return
+        
+        # 選択範囲を取得（あれば）
+        selection_info = self.edit_mode_handler.get_selection_info(editor)
+        
+        # メッセージを表示
+        selection_text = ""
+        if selection_info:
+            _, start_line, end_line = selection_info
+            selection_text = f" (lines {start_line}-{end_line})"
+        self._add_message("user", f"{user_prompt}\n\n[Edit Mode: {Path(filename).name}{selection_text}]")
+        
+        # 生成を開始
+        self._start_edit_generation(user_prompt, filename, content, selection_info)
+    
+    def _start_edit_generation(self, user_prompt: str, filename: str, content: str, selection_info):
+        """Edit mode用の生成を開始"""
+        if self._processing:
+            return
+        
+        self._processing = True
+        self._stop_generation = False
+        self.send_button.config(state=tk.DISABLED)
+        
+        # ストリーミングの準備
+        self._start_generating_animation()
+        
+        # バックグラウンドで生成
+        def generate():
+            try:
+                # Edit用のプロンプトを構築
+                prompt = self.edit_mode_handler.build_edit_prompt(
+                    user_prompt, filename, content, selection_info
+                )
+                
+                # LLMで生成
+                from .. import get_llm_client
+                llm_client = get_llm_client()
+                
+                # 応答を収集
+                full_response = ""
+                for token in llm_client.generate_stream(prompt):
+                    if self._stop_generation:
+                        self.message_queue.put(("complete", None))
+                        return
+                    full_response += token
+                    self.message_queue.put(("token", token))
+                
+                # コードブロックを抽出
+                self.message_queue.put(("edit_complete", full_response))
+                
+            except Exception as e:
+                self.message_queue.put(("error", str(e)))
+        
+        import threading
+        thread = threading.Thread(target=generate, daemon=True)
+        thread.start()
+    
+    def _on_mode_change(self):
+        """モード変更時の処理"""
+        mode = self.mode_var.get()
+        if mode == "edit":
+            # Edit modeに切り替え
+            self.context_check.config(state=tk.DISABLED)
+            self.context_var.set(True)  # Edit modeでは常にコンテキストを含む
+            
+            # EditModeHandlerを初期化（必要な場合）
+            if not self.edit_mode_handler:
+                from ..edit_mode_handler import EditModeHandler
+                from .. import get_llm_client
+                self.edit_mode_handler = EditModeHandler(get_llm_client())
+        else:
+            # Chat modeに戻る
+            self.context_check.config(state=tk.NORMAL)
     
     def _toggle_context(self):
         """コンテキストの有効/無効を切り替え"""

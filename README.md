@@ -127,8 +127,15 @@ huggingface-cli download bartowski/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instr
 4. **Code Generation**:
    - Write a comment describing what you want
    - Right-click and choose "Generate from Comment"
-   - Or use the AI Assistant panel for interactive chat
-5. **Error Fixing**:
+5. **Edit Mode (New in v0.1.5)**:
+   - Switch to "Edit" mode in the LLM Assistant panel
+   - Type your modification request (e.g., "Add error handling to this function")
+   - The AI will modify your code directly in the editor
+   - Works with selected text or entire file
+6. **Interactive Chat**:
+   - Use the AI Assistant panel for general questions
+   - Include context from your current file with the checkbox
+7. **Error Fixing**:
    - When you encounter an error, click "Explain Error" in the assistant panel
    - The AI will analyze the error and suggest fixes
 
