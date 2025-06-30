@@ -4,7 +4,7 @@
 import pytest
 import time
 from unittest.mock import patch
-from thonnycontrib.thonny_local_ollama.performance_monitor import (
+from thonnycontrib.thonny_codemate.performance_monitor import (
     PerformanceMonitor,
     measure_performance,
     Timer,
@@ -40,7 +40,7 @@ class TestPerformanceMonitor:
         assert op2_stats["count"] == 1
         assert op2_stats["total_time"] == 0.5
     
-    @patch('thonnycontrib.thonny_local_ollama.performance_monitor.logger')
+    @patch('thonnycontrib.thonny_codemate.performance_monitor.logger')
     def test_log_stats(self, mock_logger):
         """統計ログ出力のテスト"""
         monitor = PerformanceMonitor()
@@ -92,7 +92,7 @@ class TestMeasurePerformanceDecorator:
         expected_name = f"{another_test_function.__module__}.{another_test_function.__name__}"
         assert expected_name in stats
     
-    @patch('thonnycontrib.thonny_local_ollama.performance_monitor.logger')
+    @patch('thonnycontrib.thonny_codemate.performance_monitor.logger')
     def test_slow_operation_warning(self, mock_logger):
         """遅い操作の警告テスト"""
         reset_performance_stats()

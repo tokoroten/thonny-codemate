@@ -4,13 +4,13 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 
-from thonnycontrib.thonny_local_ollama import load_plugin, explain_selection_handler, generate_from_comment_handler
+from thonnycontrib.thonny_codemate import load_plugin, explain_selection_handler, generate_from_comment_handler
 
 
 class TestPluginIntegration:
     """プラグイン統合のテスト"""
     
-    @patch('thonnycontrib.thonny_local_ollama.get_workbench')
+    @patch('thonnycontrib.thonny_codemate.get_workbench')
     def test_load_plugin_success(self, mock_get_workbench):
         """プラグイン読み込み成功のテスト"""
         # Workbenchのモック
@@ -27,11 +27,11 @@ class TestPluginIntegration:
         assert mock_workbench.add_command.call_count >= 3  # 最低3つのコマンド
         assert mock_workbench.set_default.called  # デフォルト設定が登録される
     
-    @patch('thonnycontrib.thonny_local_ollama.get_workbench')
+    @patch('thonnycontrib.thonny_codemate.get_workbench')
     def test_load_plugin_already_loaded(self, mock_get_workbench):
         """プラグインが既に読み込まれている場合のテスト"""
         # 既に読み込まれている状態を設定
-        import thonnycontrib.thonny_local_ollama as plugin_module
+        import thonnycontrib.thonny_codemate as plugin_module
         plugin_module._plugin_loaded = True
         
         try:
@@ -44,7 +44,7 @@ class TestPluginIntegration:
             # 状態をリセット
             plugin_module._plugin_loaded = False
     
-    @patch('thonnycontrib.thonny_local_ollama.get_workbench')
+    @patch('thonnycontrib.thonny_codemate.get_workbench')
     @patch('tkinter.messagebox.showinfo')
     def test_explain_selection_handler_no_selection(self, mock_msgbox, mock_get_workbench):
         """選択なしでexplain_selection_handlerを呼ぶテスト"""
@@ -66,7 +66,7 @@ class TestPluginIntegration:
         mock_msgbox.assert_called_once()
         assert "No Selection" in mock_msgbox.call_args[0][0]
     
-    @patch('thonnycontrib.thonny_local_ollama.get_workbench')
+    @patch('thonnycontrib.thonny_codemate.get_workbench')
     def test_explain_selection_handler_with_selection(self, mock_get_workbench):
         """選択ありでexplain_selection_handlerを呼ぶテスト"""
         # エディタのモック
@@ -95,7 +95,7 @@ class TestPluginIntegration:
         if hasattr(mock_chat_view, 'explain_code'):
             mock_chat_view.explain_code.assert_called_with("selected code")
     
-    @patch('thonnycontrib.thonny_local_ollama.get_workbench')
+    @patch('thonnycontrib.thonny_codemate.get_workbench')
     @patch('tkinter.messagebox.showinfo')
     def test_generate_from_comment_no_comment(self, mock_msgbox, mock_get_workbench):
         """コメントなしでgenerate_from_commentを呼ぶテスト"""
@@ -118,7 +118,7 @@ class TestPluginIntegration:
         mock_msgbox.assert_called_once()
         assert "No Comment Found" in mock_msgbox.call_args[0][0]
     
-    @patch('thonnycontrib.thonny_local_ollama.get_workbench')
+    @patch('thonnycontrib.thonny_codemate.get_workbench')
     def test_generate_from_comment_with_comment(self, mock_get_workbench):
         """コメントありでgenerate_from_commentを呼ぶテスト"""
         # エディタのモック

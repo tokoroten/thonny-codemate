@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from thonnycontrib.thonny_local_ollama.model_manager import ModelManager, DownloadProgress, RECOMMENDED_MODELS
+from thonnycontrib.thonny_codemate.model_manager import ModelManager, DownloadProgress, RECOMMENDED_MODELS
 
 
 class TestModelManager:
@@ -86,7 +86,7 @@ class TestModelManager:
         path = manager.get_model_path("nonexistent")
         assert path == str(any_model)
     
-    @patch('thonnycontrib.thonny_local_ollama.model_manager.hf_hub_download')
+    @patch('thonnycontrib.thonny_codemate.model_manager.hf_hub_download')
     def test_download_model_success(self, mock_download, temp_models_dir):
         """モデルダウンロード成功のテスト"""
         manager = ModelManager(temp_models_dir)

@@ -1,4 +1,4 @@
-# Thonny ローカルLLMプラグイン
+# Thonny CodeMateプラグイン
 
 Thonny IDEにローカルLLM機能を統合するプラグインです。llama-cpp-pythonを使用してGitHub Copilotのような機能を外部APIサービスなしで提供します。
 
@@ -23,7 +23,7 @@ Thonny IDEにローカルLLM機能を統合するプラグインです。llama-c
 ### PyPIから
 ```bash
 # 標準インストール（CPU版のllama-cpp-pythonを含む）
-pip install thonny-local-ollama
+pip install thonny-codemate
 ```
 
 **GPUサポートについては**、[INSTALL_GPU.md](INSTALL_GPU.md)を参照してください：
@@ -36,8 +36,8 @@ pip install thonny-local-ollama
 #### uvを使った簡単セットアップ（推奨）
 ```bash
 # リポジトリをクローン
-git clone https://github.com/yourusername/thonny_local_ollama.git
-cd thonny_local_ollama
+git clone https://github.com/tokoroten/thonny-codemate.git
+cd thonny-codemate
 
 # uvをインストール（未インストールの場合）
 # Windows (PowerShell):
@@ -150,9 +150,9 @@ huggingface-cli download bartowski/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instr
 
 ### プロジェクト構造
 ```
-thonny_local_ollama/
+thonny-codemate/
 ├── thonnycontrib/
-│   └── thonny_local_ollama/
+│   └── thonny_codemate/
 │       ├── __init__.py       # プラグインエントリポイント
 │       ├── llm_client.py     # LLM統合
 │       ├── ui_widgets.py     # UIコンポーネント

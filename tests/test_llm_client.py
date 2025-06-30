@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
-from thonnycontrib.thonny_local_ollama.llm_client import LLMClient, ModelConfig
+from thonnycontrib.thonny_codemate.llm_client import LLMClient, ModelConfig
 
 
 class TestLLMClient:
@@ -20,7 +20,7 @@ class TestLLMClient:
     
     def test_get_config_default(self):
         """デフォルト設定の取得テスト"""
-        with patch('thonnycontrib.thonny_local_ollama.llm_client.get_workbench') as mock_wb:
+        with patch('thonnycontrib.thonny_codemate.llm_client.get_workbench') as mock_wb:
             mock_wb.return_value.get_option.side_effect = lambda key, default: default
             
             client = LLMClient()
@@ -43,7 +43,7 @@ class TestLLMClient:
         client.set_config(new_config)
         assert client._config == new_config
     
-    @patch('thonnycontrib.thonny_local_ollama.llm_client.Llama')
+    @patch('thonnycontrib.thonny_codemate.llm_client.Llama')
     def test_load_model_success(self, mock_llama):
         """モデル読み込み成功のテスト"""
         # モックの設定
@@ -76,7 +76,7 @@ class TestLLMClient:
         assert not client.is_loaded
         assert client._load_error is not None
     
-    @patch('thonnycontrib.thonny_local_ollama.llm_client.Llama')
+    @patch('thonnycontrib.thonny_codemate.llm_client.Llama')
     def test_generate(self, mock_llama):
         """テキスト生成のテスト"""
         # モックの設定

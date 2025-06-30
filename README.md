@@ -27,7 +27,7 @@ A Thonny IDE plugin that integrates local LLM capabilities using llama-cpp-pytho
 ### From PyPI
 ```bash
 # Standard installation (includes llama-cpp-python for CPU)
-pip install thonny-local-ollama
+pip install thonny-codemate
 ```
 
 **For GPU support**, see [INSTALL_GPU.md](INSTALL_GPU.md) for detailed instructions:
@@ -40,8 +40,8 @@ pip install thonny-local-ollama
 #### Quick Setup with uv (Recommended)
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/thonny_local_ollama.git
-cd thonny_local_ollama
+git clone https://github.com/tokoroten/thonny-codemate.git
+cd thonny-codemate
 
 # Install uv if not already installed
 # Windows (PowerShell):
@@ -154,9 +154,9 @@ huggingface-cli download bartowski/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instr
 
 ### Project Structure
 ```
-thonny_local_ollama/
+thonny-codemate/
 ├── thonnycontrib/
-│   └── thonny_local_ollama/
+│   └── thonny_codemate/
 │       ├── __init__.py       # Plugin entry point
 │       ├── llm_client.py     # LLM integration
 │       ├── ui_widgets.py     # UI components

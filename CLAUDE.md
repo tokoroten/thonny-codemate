@@ -35,19 +35,19 @@ This is a Thonny IDE plugin that integrates local LLM capabilities using llama-c
    - Optional support for ChatGPT/Ollama/OpenRouter servers
 
 3. **Distribution**
-   - PyPI package: `pip install thonny-ollama`
+   - PyPI package: `pip install thonny-codemate`
    - USB portable version with Thonny + plugin + models bundled
 
 ## Project Structure
 
 ```
-thonny_local_ollama/
+thonny-codemate/
 ├── docs_for_ai/
 │   └── project_goal.md    # Detailed project requirements
 ├── pyproject.toml         # Package configuration
 ├── README.md
 ├── thonnycontrib/
-│   └── thonny_local_ollama/
+│   └── thonny_codemate/
 │       ├── __init__.py    # load_plugin() implementation
 │       ├── llm_client.py  # llama-cpp-python wrapper
 │       ├── ui_widgets.py  # Thonny UI components

@@ -1,5 +1,5 @@
 """
-Thonny Local LLM API
+Thonny CodeMate API
 Thonny上で実行するプログラムからLLMにアクセスするためのシンプルなAPI
 """
 from typing import Optional, Iterator
@@ -18,7 +18,7 @@ def ask(prompt: str, temperature: float = 0.7, max_tokens: int = 1000) -> str:
         LLMの回答
         
     Example:
-        >>> from thonnycontrib.thonny_local_ollama.api import ask
+        >>> from thonnycontrib.thonny_codemate.api import ask
         >>> answer = ask("Pythonでリストを逆順にする方法を教えて")
         >>> print(answer)
     """
@@ -43,7 +43,7 @@ def ask_stream(prompt: str, temperature: float = 0.7) -> Iterator[str]:
         LLMの回答をトークンごとに
         
     Example:
-        >>> from thonnycontrib.thonny_local_ollama.api import ask_stream
+        >>> from thonnycontrib.thonny_codemate.api import ask_stream
         >>> for token in ask_stream("Hello, how are you?"):
         ...     print(token, end="", flush=True)
     """
@@ -65,7 +65,7 @@ def is_ready() -> bool:
         True if LLM is loaded and ready
         
     Example:
-        >>> from thonnycontrib.thonny_local_ollama.api import is_ready
+        >>> from thonnycontrib.thonny_codemate.api import is_ready
         >>> if is_ready():
         ...     print("LLM is ready!")
     """
@@ -86,7 +86,7 @@ def get_model_info() -> dict:
         モデル情報の辞書
         
     Example:
-        >>> from thonnycontrib.thonny_local_ollama.api import get_model_info
+        >>> from thonnycontrib.thonny_codemate.api import get_model_info
         >>> info = get_model_info()
         >>> print(f"Model: {info.get('model_path', 'Not loaded')}")
     """
@@ -116,7 +116,7 @@ class Chat:
     会話履歴を保持するチャットクラス
     
     Example:
-        >>> from thonnycontrib.thonny_local_ollama.api import Chat
+        >>> from thonnycontrib.thonny_codemate.api import Chat
         >>> chat = Chat()
         >>> response = chat.send("Pythonとは何ですか？")
         >>> print(response)

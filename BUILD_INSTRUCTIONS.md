@@ -20,14 +20,14 @@ python -m build
 ```
 
 This will create:
-- `dist/thonny_local_ollama-0.1.0-py3-none-any.whl`
-- `dist/thonny_local_ollama-0.1.0.tar.gz`
+- `dist/thonny_codemate-0.1.0-py3-none-any.whl`
+- `dist/thonny_codemate-0.1.0.tar.gz`
 
 ## 3. Check the Package
 
 ```bash
 # Check package contents
-tar -tvf dist/thonny_local_ollama-0.1.0.tar.gz
+tar -tvf dist/thonny_codemate-0.1.0.tar.gz
 
 # Check for issues
 python -m twine check dist/*
@@ -43,10 +43,10 @@ test_env\Scripts\activate  # Windows
 source test_env/bin/activate  # Linux/macOS
 
 # Install from local wheel
-pip install dist/thonny_local_ollama-0.1.0-py3-none-any.whl
+pip install dist/thonny_codemate-0.1.0-py3-none-any.whl
 
 # Test import
-python -c "import thonnycontrib.thonny_local_ollama; print('Success!')"
+python -c "import thonnycontrib.thonny_codemate; print('Success!')"
 ```
 
 ## 5. Upload to PyPI

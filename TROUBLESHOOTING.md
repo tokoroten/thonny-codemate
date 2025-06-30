@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-This guide helps you resolve common issues with the Thonny Local LLM Plugin.
+This guide helps you resolve common issues with the Thonny CodeMate Plugin.
 
 ## Common Issues
 

@@ -2,7 +2,7 @@
 メッセージ仮想化のテスト
 """
 import pytest
-from thonnycontrib.thonny_local_ollama.message_virtualization import (
+from thonnycontrib.thonny_codemate.message_virtualization import (
     MessageVirtualizer,
     MessageCache
 )

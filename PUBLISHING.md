@@ -1,6 +1,6 @@
 # PyPI Publishing Guide
 
-This guide describes how to publish the thonny-local-ollama package to PyPI.
+This guide describes how to publish the thonny-codemate package to PyPI.
 
 ## Prerequisites
 
@@ -27,8 +27,8 @@ python -m build
 ```
 
 This creates:
-- `dist/thonny_local_ollama-0.1.0-py3-none-any.whl` (wheel file)
-- `dist/thonny_local_ollama-0.1.0.tar.gz` (source distribution)
+- `dist/thonny_codemate-0.1.0-py3-none-any.whl` (wheel file)
+- `dist/thonny_codemate-0.1.0.tar.gz` (source distribution)
 
 ## Testing with TestPyPI (Recommended)
 
@@ -39,7 +39,7 @@ python -m twine upload --repository testpypi dist/*
 
 2. Test installation:
 ```bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ thonny-local-ollama
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ thonny-codemate
 ```
 
 ## Publishing to PyPI
@@ -53,7 +53,7 @@ Enter your PyPI username and API token when prompted.
 
 2. Verify installation:
 ```bash
-pip install thonny-local-ollama
+pip install thonny-codemate
 ```
 
 ## Using .pypirc for Authentication

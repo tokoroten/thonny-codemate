@@ -4,7 +4,7 @@
 import pytest
 import time
 from unittest.mock import Mock, patch
-from thonnycontrib.thonny_local_ollama.error_handler import (
+from thonnycontrib.thonny_codemate.error_handler import (
     ErrorContext,
     log_error_with_context,
     with_error_handling,
@@ -35,7 +35,7 @@ class TestErrorContext:
 class TestErrorLogging:
     """エラーログ機能のテスト"""
     
-    @patch('thonnycontrib.thonny_local_ollama.error_handler.logger')
+    @patch('thonnycontrib.thonny_codemate.error_handler.logger')
     def test_log_error_with_context(self, mock_logger):
         """コンテキスト付きエラーログのテスト"""
         error = ValueError("Test error")
@@ -48,7 +48,7 @@ class TestErrorLogging:
         assert mock_logger.debug.called
         assert "Test error" in message
     
-    @patch('thonnycontrib.thonny_local_ollama.error_handler.logger')
+    @patch('thonnycontrib.thonny_codemate.error_handler.logger')
     def test_user_message_generation(self, mock_logger):
         """ユーザーメッセージ生成のテスト"""
         # FileNotFoundError
@@ -76,7 +76,7 @@ class TestErrorHandlingDecorator:
         result = successful_function()
         assert result == "success"
     
-    @patch('thonnycontrib.thonny_local_ollama.error_handler.logger')
+    @patch('thonnycontrib.thonny_codemate.error_handler.logger')
     def test_error_handling(self, mock_logger):
         """エラー処理のテスト"""
         @with_error_handling("test operation", show_user_message=False, default_return="default")

@@ -152,8 +152,8 @@ def main():
         print(f"\n⚠️  Plugin directory not found: {PLUGIN_DIR}")
         print("Creating plugin structure...")
         PLUGIN_DIR.mkdir(parents=True, exist_ok=True)
-        (PLUGIN_DIR / "thonny_local_ollama").mkdir(exist_ok=True)
-        init_file = PLUGIN_DIR / "thonny_local_ollama" / "__init__.py"
+        (PLUGIN_DIR / "thonny_codemate").mkdir(exist_ok=True)
+        init_file = PLUGIN_DIR / "thonny_codemate" / "__init__.py"
         if not init_file.exists():
             init_file.write_text('''"""Thonny Local LLM Plugin"""
 

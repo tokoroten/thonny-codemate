@@ -2,7 +2,7 @@
 
 ## Overview
 
-By default, `thonny-local-ollama` installs with CPU support. To enable GPU acceleration, you need to reinstall `llama-cpp-python` with the appropriate build for your hardware.
+By default, `thonny-codemate` installs with CPU support. To enable GPU acceleration, you need to reinstall `llama-cpp-python` with the appropriate build for your hardware.
 
 ## Automatic GPU Detection
 
@@ -14,7 +14,7 @@ When you run the plugin, it will automatically detect available GPUs and use the
 
 ```bash
 # First, install the plugin
-pip install thonny-local-ollama
+pip install thonny-codemate
 
 # Then reinstall llama-cpp-python with CUDA support
 pip uninstall llama-cpp-python
@@ -33,7 +33,7 @@ python -c "from llama_cpp import llama_cpp; print('CUDA Support:', hasattr(llama
 
 ```bash
 # First, install the plugin
-pip install thonny-local-ollama
+pip install thonny-codemate
 
 # Then rebuild llama-cpp-python with Metal support
 pip uninstall llama-cpp-python

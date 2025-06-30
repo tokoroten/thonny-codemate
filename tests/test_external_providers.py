@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 import json
 
-from thonnycontrib.thonny_local_ollama.external_providers import (
+from thonnycontrib.thonny_codemate.external_providers import (
     ChatGPTProvider,
     OllamaProvider,
     OpenRouterProvider

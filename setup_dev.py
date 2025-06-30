@@ -71,7 +71,7 @@ def create_project_structure():
     
     # 必要なディレクトリを作成
     directories = [
-        "thonnycontrib/thonny_local_ollama",
+        "thonnycontrib/thonny_codemate",
         "tests",
         "models",
         "docs_for_ai",
@@ -83,7 +83,7 @@ def create_project_structure():
     # __init__.pyファイルを作成
     init_files = [
         "thonnycontrib/__init__.py",
-        "thonnycontrib/thonny_local_ollama/__init__.py",
+        "thonnycontrib/thonny_codemate/__init__.py",
         "tests/__init__.py",
     ]
     
@@ -94,7 +94,7 @@ def create_project_structure():
             print(f"Created: {init_file}")
     
     # 基本的なプラグインコードを作成
-    plugin_init = Path("thonnycontrib/thonny_local_ollama/__init__.py")
+    plugin_init = Path("thonnycontrib/thonny_codemate/__init__.py")
     if plugin_init.stat().st_size == 0:  # ファイルが空の場合
         plugin_init.write_text('''"""Thonny Local LLM Plugin"""
 
