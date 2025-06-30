@@ -160,3 +160,4 @@ uv.lock
 
 # Reference repositories (not part of this project)
 reference_repos/
+vscode-copilot-chat/
