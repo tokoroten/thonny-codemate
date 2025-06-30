@@ -623,8 +623,8 @@ class LLMChatViewHTML(ttk.Frame):
         if self._html_ready:
             # JavaScriptで新しいメッセージを追加（全体再読み込みを避ける）
             self._append_message_js(sender, text)
-            # ユーザーメッセージの場合のみ自動スクロール（会話開始時）
-            if sender == "user":
+            # ユーザーメッセージまたはシステムメッセージ（Edit mode）の場合にスクロール
+            if sender in ["user", "system"]:
                 self._scroll_to_bottom()
         else:
             # HTMLが準備できていない場合は、準備完了を待ってから追加
@@ -639,8 +639,8 @@ class LLMChatViewHTML(ttk.Frame):
         if self._html_ready:
             # JavaScriptで新しいメッセージを追加
             self._append_message_js(sender, text)
-            # ユーザーメッセージの場合のみスクロール
-            if sender == "user":
+            # ユーザーメッセージまたはシステムメッセージ（Edit mode）の場合にスクロール
+            if sender in ["user", "system"]:
                 self._scroll_to_bottom()
         else:
             # まだ準備ができていない場合は再試行（最大100回）
