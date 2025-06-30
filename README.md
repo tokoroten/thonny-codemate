@@ -2,6 +2,8 @@
 
 A Thonny IDE plugin that integrates local LLM capabilities using llama-cpp-python to provide GitHub Copilot-like features without requiring external API services.
 
+![image](https://github.com/user-attachments/assets/af94b175-bcc1-4e44-bbed-37402ee2850f)
+
 ## Features
 
 - 🤖 **Local LLM Integration**: Uses llama-cpp-python to load GGUF models directly (no Ollama server required)
