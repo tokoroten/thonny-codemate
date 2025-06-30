@@ -31,16 +31,13 @@ Instructions:
 Current file: {filename}
 Language: {language}
 
-Current code:
-```{language}
-{content}
-```
+{code_section}
 
 {selection_info}
 
 User request: {user_prompt}
 
-Please provide the modified code. Start your response with a code block containing the updated code:
+Please provide the {code_instruction}. Start your response with a code block containing the {output_type}:
 """
 
     SELECTION_TEMPLATE = """Selected region (lines {start_line}-{end_line}):
@@ -72,12 +69,27 @@ Focus your changes primarily on the selected region, but you may modify other pa
                 end_line=end_line
             )
         
+        # Handle empty files
+        if not content:
+            code_section = "The file is currently empty."
+            code_instruction = "code"
+            output_type = "complete code"
+        else:
+            code_section = f"""Current code:
+```{language}
+{content}
+```"""
+            code_instruction = "modified code"
+            output_type = "updated code"
+        
         return self.EDIT_PROMPT_TEMPLATE.format(
             filename=filename or "Untitled",
             language=language,
-            content=content,
+            code_section=code_section,
             selection_info=selection_info,
-            user_prompt=user_prompt
+            user_prompt=user_prompt,
+            code_instruction=code_instruction,
+            output_type=output_type
         )
     
     def _detect_language(self, filename: str) -> str:
@@ -111,61 +123,43 @@ Focus your changes primarily on the selected region, but you may modify other pa
     def extract_code_block(self, response: str) -> Optional[str]:
         """Extract the first code block from LLM response
         
-        Inspired by VSCode Copilot Chat's implementation, this handles:
-        - Triple backticks inside strings and comments
-        - Nested code blocks in docstrings
-        - Multiple code blocks (returns the first one)
-        - Different fence lengths (```, ````, etc.)
+        Simple and practical approach:
+        - Find the first ``` with optional language identifier
+        - Find the last ``` in the response
+        - Everything in between is the code block
         """
         lines = response.split('\n')
-        in_code_block = False
-        code_lines = []
-        opening_fence = None
-        opening_fence_len = 0
         
-        # Regex to match code fences (3 or more backticks or tildes)
-        fence_pattern = re.compile(r'^(\s*)(`{3,}|~{3,})(\w*)')
-        
+        # Find the opening fence
+        start_index = -1
         for i, line in enumerate(lines):
-            fence_match = fence_pattern.match(line)
-            
-            if fence_match:
-                indent = fence_match.group(1)
-                fence_chars = fence_match.group(2)
-                language = fence_match.group(3)
-                
-                if not in_code_block:
-                    # Starting a code block
-                    in_code_block = True
-                    opening_fence = fence_chars[0]  # '`' or '~'
-                    opening_fence_len = len(fence_chars)
-                    continue
-                else:
-                    # Check if this is a closing fence
-                    # Must match opening fence type, have at least same length, and no language
-                    is_same_fence_type = fence_chars[0] == opening_fence
-                    is_long_enough = len(fence_chars) >= opening_fence_len
-                    has_no_language = not language
-                    
-                    if is_same_fence_type and is_long_enough and has_no_language:
-                        # This is the closing fence
-                        break
-                    else:
-                        # This is content inside the code block (nested fence)
-                        code_lines.append(line)
-            elif in_code_block:
-                code_lines.append(line)
+            stripped = line.strip()
+            if stripped.startswith('```'):
+                start_index = i
+                break
         
-        if code_lines:
-            return '\n'.join(code_lines).strip()
+        if start_index == -1:
+            # No code block found, check if the entire response might be code
+            lines_stripped = response.strip().split('\n')
+            if len(lines_stripped) > 3 and any(line.strip().startswith(('def ', 'class ', 'import ', 'from ')) for line in lines_stripped):
+                return response.strip()
+            return None
         
-        # If no code block found, check if the entire response might be code
-        # (sometimes LLMs return code without backticks)
-        lines_stripped = response.strip().split('\n')
-        if len(lines_stripped) > 3 and any(line.strip().startswith(('def ', 'class ', 'import ', 'from ')) for line in lines_stripped):
-            return response.strip()
-            
-        return None
+        # Find the last fence (searching from the end)
+        end_index = -1
+        for i in range(len(lines) - 1, start_index, -1):
+            stripped = lines[i].strip()
+            if stripped.startswith('```'):
+                end_index = i
+                break
+        
+        if end_index == -1 or end_index <= start_index:
+            # No closing fence found
+            return None
+        
+        # Extract code between fences
+        code_lines = lines[start_index + 1:end_index]
+        return '\n'.join(code_lines).strip()
     
     def expand_existing_code_markers(self, modified_code: str, original_code: str) -> str:
         """Expand '# ...existing code...' markers with actual code"""

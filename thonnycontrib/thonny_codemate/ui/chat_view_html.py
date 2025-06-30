@@ -1290,9 +1290,9 @@ Full file content:
         text_widget = editor.get_text_widget()
         content = text_widget.get("1.0", tk.END).strip()
         
+        # 空のファイルでも処理を続行（新規コード生成として扱う）
         if not content:
-            self._add_message("system", tr("The editor is empty. Please write some code first."))
-            return
+            content = ""  # 空のコンテンツとして処理
         
         # 選択範囲を取得（あれば）
         selection_info = self.edit_mode_handler.get_selection_info(editor)

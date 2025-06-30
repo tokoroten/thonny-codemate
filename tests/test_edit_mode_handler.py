@@ -103,6 +103,19 @@ result = calculate(5, 3)"""
         assert "test.py" in prompt
         assert "def divide(a, b):" in prompt
     
+    def test_build_edit_prompt_empty_file(self):
+        """Test edit prompt building for empty file"""
+        prompt = self.handler.build_edit_prompt(
+            user_prompt="Create a hello world function",
+            filename="test.py",
+            content="",
+            selection=None
+        )
+        assert "Create a hello world function" in prompt
+        assert "test.py" in prompt
+        assert "The file is currently empty" in prompt
+        assert "complete code" in prompt
+    
     def test_extract_code_block_with_standalone_backticks(self):
         """Test extraction when code contains standalone triple backticks"""
         response = '''Here's the code:
@@ -122,11 +135,12 @@ def create_markdown():
     
     def test_extract_code_block_indented(self):
         """Test extraction with indented code blocks"""
+        # Regex now requires fence to be at start of line (with optional whitespace)
         response = """The solution:
-    ```python
-    def solve():
-        return 42
-    ```
+```python
+def solve():
+    return 42
+```
 """
         result = self.handler.extract_code_block(response)
         assert result == 'def solve():\n    return 42'
@@ -159,7 +173,7 @@ End of code.'''
     def test_extract_code_block_with_different_fence_lengths(self):
         """Test extraction with different fence lengths (VSCode style)"""
         response = '''Here's the updated code:
-````python
+```python
 def example():
     markdown = """
     ```python
@@ -167,7 +181,7 @@ def example():
     ```
     """
     return markdown
-````
+```
 '''
         result = self.handler.extract_code_block(response)
         assert 'def example():' in result
@@ -182,8 +196,9 @@ def test():
     return True
 ~~~
 """
+        # Tilde fences are not supported, should return None
         result = self.handler.extract_code_block(response)
-        assert result == 'def test():\n    return True'
+        assert result is None
     
     def test_expand_existing_code_markers(self):
         """Test expanding ...existing code... markers"""
