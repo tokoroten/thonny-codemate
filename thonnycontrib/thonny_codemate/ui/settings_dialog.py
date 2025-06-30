@@ -7,6 +7,7 @@ from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from typing import Optional
 import logging
+import urllib.error
 
 from thonny import get_workbench
 from ..i18n import tr
@@ -263,8 +264,7 @@ class SettingsDialog(tk.Toplevel):
         # ChatGPT/OpenRouter用コンボボックス
         self.external_model_combo = ttk.Combobox(
             self.model_name_frame,
-            textvariable=self.external_model_var,
-            state="readonly"
+            textvariable=self.external_model_var
         )
         
         # Ollama用エントリー（削除予定、互換性のために残す）
@@ -279,6 +279,23 @@ class SettingsDialog(tk.Toplevel):
             text=tr("Refresh"),
             command=self._fetch_ollama_models,
             width=10
+        )
+        
+        # OpenRouter用リフレッシュボタン
+        self.refresh_openrouter_button = ttk.Button(
+            self.model_name_frame,
+            text=tr("Refresh"),
+            command=self._fetch_openrouter_models,
+            width=10
+        )
+        
+        # Free only checkbox for OpenRouter
+        self.openrouter_free_only_var = tk.BooleanVar(value=True)
+        self.openrouter_free_checkbox = ttk.Checkbutton(
+            self.model_name_frame,
+            text=tr("Free only"),
+            variable=self.openrouter_free_only_var,
+            command=self._fetch_openrouter_models
         )
         
         # Language
@@ -514,6 +531,8 @@ class SettingsDialog(tk.Toplevel):
         self.api_key_frame.pack_forget()
         self.model_name_frame.pack_forget()
         self.refresh_ollama_button.pack_forget()
+        self.refresh_openrouter_button.pack_forget()
+        self.openrouter_free_checkbox.pack_forget()
         self.ollama_server_frame.pack_forget()
         
         if provider == "local":
@@ -531,20 +550,31 @@ class SettingsDialog(tk.Toplevel):
                 self.external_model_entry.pack_forget()
                 self.external_model_combo.pack(side="left", fill="x", expand=True)
                 
-                # モデルリストを更新
-                from ..utils.constants import ProviderConstants
-                models = ProviderConstants.PROVIDER_MODELS.get(provider, [])
-                
-                self.external_model_combo['values'] = models
-                if self.external_model_var.get() not in models:
-                    self.external_model_var.set(models[0])
+                if provider == "chatgpt":
+                    # ChatGPT: 静的なモデルリスト、読み取り専用
+                    self.external_model_combo.config(state="readonly")
+                    from ..utils.constants import ProviderConstants
+                    models = ProviderConstants.PROVIDER_MODELS.get(provider, [])
+                    
+                    self.external_model_combo['values'] = models
+                    if self.external_model_var.get() not in models:
+                        self.external_model_var.set(models[0])
+                elif provider == "openrouter":
+                    # OpenRouter: 動的にモデルを取得、手動入力可能
+                    self.external_model_combo.config(state="normal")
+                    self.refresh_openrouter_button.pack(side="left", padx=(5, 0))
+                    self.openrouter_free_checkbox.pack(side="left", padx=(5, 0))
+                    
+                    # 初回取得を試みる
+                    self._fetch_openrouter_models()
             
             elif provider == "ollama":
                 # サーバー設定を表示
                 self.ollama_server_frame.pack(fill="both", expand=True, pady=2)
                 self.model_name_frame.pack(fill="x", pady=2)
                 
-                # Ollamaの場合もコンボボックスを使用
+                # Ollamaの場合もコンボボックスを使用、手動入力可能
+                self.external_model_combo.config(state="normal")
                 self.external_model_entry.pack_forget()
                 self.external_model_combo.pack(side="left", fill="x", expand=True)
                 
@@ -875,6 +905,72 @@ class SettingsDialog(tk.Toplevel):
             logger.error(f"Error in _fetch_ollama_models: {e}\n{traceback.format_exc()}")
             messagebox.showerror(tr("Error"), tr("Failed to fetch models: {}").format(str(e)))
             self.refresh_ollama_button.config(state="normal", text=tr("Refresh"))
+    
+    def _fetch_openrouter_models(self):
+        """OpenRouterからモデルリストを取得"""
+        try:
+            # 現在の設定を一時的に保存
+            current_model = self.external_model_var.get()
+            
+            # ボタンを無効化
+            self.refresh_openrouter_button.config(state="disabled", text=tr("Loading..."))
+            
+            # バックグラウンドで取得
+            def fetch_models():
+                try:
+                    from ..external_providers import OpenRouterProvider
+                    api_key = self.api_key_var.get().strip()
+                    
+                    if not api_key:
+                        # APIキーがない場合はデフォルトの無料モデルリストを使用
+                        from ..utils.constants import ProviderConstants
+                        models = ProviderConstants.PROVIDER_MODELS.get("openrouter", [])
+                        self.after(0, lambda: self._update_openrouter_models(models, current_model))
+                        return
+                    
+                    provider = OpenRouterProvider(api_key=api_key)
+                    models = provider.get_models(free_only=self.openrouter_free_only_var.get())
+                    
+                    # UIスレッドで更新
+                    self.after(0, lambda: self._update_openrouter_models(models, current_model))
+                except Exception as e:
+                    import traceback
+                    logger.error(f"Failed to fetch OpenRouter models: {e}\n{traceback.format_exc()}")
+                    # エラー時はデフォルトリストを使用
+                    from ..utils.constants import ProviderConstants
+                    models = ProviderConstants.PROVIDER_MODELS.get("openrouter", [])
+                    self.after(0, lambda: self._update_openrouter_models(models, current_model))
+            
+            import threading
+            thread = threading.Thread(target=fetch_models, daemon=True)
+            thread.start()
+            
+        except Exception as e:
+            import traceback
+            logger.error(f"Error in _fetch_openrouter_models: {e}\n{traceback.format_exc()}")
+            self.refresh_openrouter_button.config(state="normal", text=tr("Refresh"))
+    
+    def _update_openrouter_models(self, models: list, current_model: str):
+        """OpenRouterモデルリストを更新"""
+        try:
+            # ボタンを有効化
+            self.refresh_openrouter_button.config(state="normal", text=tr("Refresh"))
+            
+            if not models:
+                models = ["meta-llama/llama-3.2-1b-instruct:free"]  # デフォルト
+            
+            # モデルリストを更新
+            self.external_model_combo['values'] = models
+            
+            # 現在のモデルがリストにある場合は選択を維持
+            if current_model in models:
+                self.external_model_var.set(current_model)
+            else:
+                # ない場合は最初のモデルを選択
+                self.external_model_var.set(models[0])
+                
+        except Exception as e:
+            logger.error(f"Error updating OpenRouter models: {e}")
     
     def _update_ollama_models(self, models: list, current_model: str, error: Optional[str] = None):
         """Ollamaモデルリストを更新"""

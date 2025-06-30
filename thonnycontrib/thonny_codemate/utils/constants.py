@@ -59,11 +59,11 @@ class ProviderConstants:
             "o1-mini"
         ],
         "openrouter": [
-            "meta-llama/llama-3.2-3b-instruct:free",
             "meta-llama/llama-3.2-1b-instruct:free",
+            "meta-llama/llama-3.1-8b-instruct:free",
             "google/gemini-2.0-flash-exp:free",
-            "anthropic/claude-3.5-sonnet",
-            "openai/gpt-4o"
+            "mistralai/mistral-7b-instruct:free",
+            "qwen/qwen-2.5-72b-instruct:free"
         ]
     }
     

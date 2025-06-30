@@ -418,7 +418,7 @@ class OllamaProvider(ExternalProvider):
 class OpenRouterProvider(ExternalProvider):
     """OpenRouter APIプロバイダー"""
     
-    def __init__(self, api_key: str, model: str = "meta-llama/llama-3.2-3b-instruct:free"):
+    def __init__(self, api_key: str, model: str = "meta-llama/llama-3.2-1b-instruct:free"):
         self.api_key = api_key
         self.model = model
         self.base_url = "https://openrouter.ai/api/v1"
@@ -506,6 +506,53 @@ class OpenRouterProvider(ExternalProvider):
         except Exception as e:
             logger.error(f"OpenRouter streaming failed: {e}")
             yield f"[Error: {str(e)}]"
+    
+    def get_models(self, free_only: bool = True) -> list[str]:
+        """利用可能なモデルのリストを取得
+        
+        Args:
+            free_only: Trueの場合、無料モデルのみを返す
+        """
+        try:
+            req = urllib.request.Request(
+                f"{self.base_url}/models",
+                headers={
+                    "Content-Type": "application/json"
+                }
+            )
+            
+            context = ssl.create_default_context()
+            
+            with urllib.request.urlopen(req, context=context, timeout=10) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                
+                models = []
+                for model in data.get('data', []):
+                    model_id = model.get('id', '')
+                    
+                    if free_only:
+                        # 無料モデルをフィルタリング
+                        pricing = model.get('pricing', {})
+                        prompt_price = pricing.get('prompt', '')
+                        
+                        # :free サフィックスまたは価格が0のモデル
+                        if ':free' in model_id or str(prompt_price) == '0':
+                            models.append(model_id)
+                    else:
+                        models.append(model_id)
+                
+                return sorted(models)
+                
+        except Exception as e:
+            logger.error(f"Failed to fetch OpenRouter models: {e}")
+            # フォールバック: デフォルトの無料モデルリストを返す
+            return [
+                "meta-llama/llama-3.2-1b-instruct:free",
+                "meta-llama/llama-3.1-8b-instruct:free",
+                "google/gemini-2.0-flash-exp:free",
+                "mistralai/mistral-7b-instruct:free",
+                "qwen/qwen-2.5-72b-instruct:free"
+            ]
     
     def get_model_info(self, model_name: Optional[str] = None) -> Dict[str, Any]:
         """モデルの詳細情報を取得（コンテキストサイズを含む）"""
