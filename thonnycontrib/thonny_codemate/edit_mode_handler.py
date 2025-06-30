@@ -109,29 +109,49 @@ Focus your changes primarily on the selected region, but you may modify other pa
         return language_map.get(ext, 'text')
     
     def extract_code_block(self, response: str) -> Optional[str]:
-        """Extract the first code block from LLM response"""
+        """Extract the first code block from LLM response
+        
+        Inspired by VSCode Copilot Chat's implementation, this handles:
+        - Triple backticks inside strings and comments
+        - Nested code blocks in docstrings
+        - Multiple code blocks (returns the first one)
+        - Different fence lengths (```, ````, etc.)
+        """
         lines = response.split('\n')
         in_code_block = False
         code_lines = []
-        block_delimiter_count = 0
+        opening_fence = None
+        opening_fence_len = 0
+        
+        # Regex to match code fences (3 or more backticks or tildes)
+        fence_pattern = re.compile(r'^(\s*)(`{3,}|~{3,})(\w*)')
         
         for i, line in enumerate(lines):
-            # Check for code block delimiter at the start of line
-            if line.strip().startswith('```'):
+            fence_match = fence_pattern.match(line)
+            
+            if fence_match:
+                indent = fence_match.group(1)
+                fence_chars = fence_match.group(2)
+                language = fence_match.group(3)
+                
                 if not in_code_block:
                     # Starting a code block
                     in_code_block = True
-                    block_delimiter_count = 1
-                    # Skip the opening delimiter line
+                    opening_fence = fence_chars[0]  # '`' or '~'
+                    opening_fence_len = len(fence_chars)
                     continue
                 else:
-                    # Check if this could be the closing delimiter
-                    # It should be just ``` with nothing else (except whitespace)
-                    if line.strip() == '```':
-                        # This is the closing delimiter
+                    # Check if this is a closing fence
+                    # Must match opening fence type, have at least same length, and no language
+                    is_same_fence_type = fence_chars[0] == opening_fence
+                    is_long_enough = len(fence_chars) >= opening_fence_len
+                    has_no_language = not language
+                    
+                    if is_same_fence_type and is_long_enough and has_no_language:
+                        # This is the closing fence
                         break
                     else:
-                        # This is content inside the code block that happens to start with ```
+                        # This is content inside the code block (nested fence)
                         code_lines.append(line)
             elif in_code_block:
                 code_lines.append(line)
