@@ -4,12 +4,11 @@
 import pytest
 import time
 from unittest.mock import Mock, patch
-from thonnycontrib.thonny_codemate.error_handler import (
+from thonnycontrib.thonny_codemate.utils.unified_error_handler import (
     ErrorContext,
     log_error_with_context,
     with_error_handling,
-    retry_network_operation,
-    RetryableOperation
+    retry_decorator as retry_network_operation
 )
 
 
@@ -35,7 +34,7 @@ class TestErrorContext:
 class TestErrorLogging:
     """エラーログ機能のテスト"""
     
-    @patch('thonnycontrib.thonny_codemate.error_handler.logger')
+    @patch('thonnycontrib.thonny_codemate.utils.unified_error_handler.logger')
     def test_log_error_with_context(self, mock_logger):
         """コンテキスト付きエラーログのテスト"""
         error = ValueError("Test error")
@@ -48,7 +47,7 @@ class TestErrorLogging:
         assert mock_logger.debug.called
         assert "Test error" in message
     
-    @patch('thonnycontrib.thonny_codemate.error_handler.logger')
+    @patch('thonnycontrib.thonny_codemate.utils.unified_error_handler.logger')
     def test_user_message_generation(self, mock_logger):
         """ユーザーメッセージ生成のテスト"""
         # FileNotFoundError
@@ -76,7 +75,7 @@ class TestErrorHandlingDecorator:
         result = successful_function()
         assert result == "success"
     
-    @patch('thonnycontrib.thonny_codemate.error_handler.logger')
+    @patch('thonnycontrib.thonny_codemate.utils.unified_error_handler.logger')
     def test_error_handling(self, mock_logger):
         """エラー処理のテスト"""
         @with_error_handling("test operation", show_user_message=False, default_return="default")
@@ -85,7 +84,7 @@ class TestErrorHandlingDecorator:
         
         result = failing_function()
         assert result == "default"
-        assert mock_logger.error.called
+        assert mock_logger.log.called
 
 
 class TestRetryDecorator:
@@ -141,36 +140,3 @@ class TestRetryDecorator:
         assert call_count == 3
 
 
-class TestRetryableOperation:
-    """RetryableOperationクラスのテスト"""
-    
-    def test_successful_operation(self):
-        """正常実行時のテスト"""
-        def operation(x, y):
-            return x + y
-        
-        retryable = RetryableOperation(operation)
-        result = retryable.execute(1, 2)
-        assert result == 3
-    
-    def test_retry_with_eventual_success(self):
-        """最終的に成功するリトライのテスト"""
-        attempt = 0
-        
-        def flaky_operation():
-            nonlocal attempt
-            attempt += 1
-            if attempt < 3:
-                raise ValueError("Temporary error")
-            return "success"
-        
-        retryable = RetryableOperation(
-            flaky_operation,
-            max_attempts=3,
-            delay=0.01,
-            exceptions=(ValueError,)
-        )
-        
-        result = retryable.execute()
-        assert result == "success"
-        assert attempt == 3
