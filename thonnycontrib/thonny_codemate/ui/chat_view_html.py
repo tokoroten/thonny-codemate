@@ -95,6 +95,14 @@ class LLMChatViewHTML(ttk.Frame):
         self._last_update_time = 0
         self._update_pending = False
         
+        # ストリーミングメッセージIDを生成
+        self._current_message_id = None
+        
+        # 一時ファイルのパス
+        import tempfile
+        self._temp_dir = tempfile.mkdtemp(prefix="thonny_llm_")
+        self._current_html_path = None
+        
         # 会話履歴を読み込む
         self._load_chat_history()
     
@@ -186,9 +194,28 @@ class LLMChatViewHTML(ttk.Frame):
         if not self.messages:
             self._html_ready = True
         
+        # ストリーミング表示エリア（HTMLビューと入力エリアの間）
+        self.streaming_frame = ttk.LabelFrame(self, text=tr("Generating..."), padding=5)
+        # 初期状態では非表示
+        
+        # ストリーミング用のテキストウィジェット
+        from tkinter import scrolledtext
+        self.streaming_text = scrolledtext.ScrolledText(
+            self.streaming_frame,
+            height=6,
+            wrap=tk.WORD,
+            font=("Consolas", 10),
+            background="#f8f8f8",
+            foreground="#333333",
+            padx=10,
+            pady=5
+        )
+        self.streaming_text.pack(fill=tk.BOTH, expand=True)
+        self.streaming_text.config(state=tk.DISABLED)  # 読み取り専用
+        
         # 入力エリア
         input_frame = ttk.Frame(self)
-        input_frame.grid(row=2, column=0, sticky="ew", padx=3, pady=2)
+        input_frame.grid(row=3, column=0, sticky="ew", padx=3, pady=2)
         input_frame.columnconfigure(0, weight=1)
         
         # 入力テキスト
@@ -341,70 +368,20 @@ class LLMChatViewHTML(ttk.Frame):
             # HTMLの読み込み完了を待つためのチェック
             self.after(100, self._check_html_ready)
             
-            # 完全読み込み後にスクロール
-            self._scroll_to_bottom()
+            # スクロール管理システムを初期化（HTMLロード後）
+            self.after(200, lambda: self._init_scroll_manager() if not hasattr(self, '_scroll_manager_initialized') else None)
+            
+            # 完全読み込み後にスクロール（初回のみ）
+            if not self.messages or len(self.messages) <= 1:
+                self._scroll_to_bottom()
         else:
-            # ストリーミング中は最後のメッセージのみ更新（再読み込みしない）
-            if self.messages and self.messages[-1][0] == "assistant":
-                # 最後のメッセージのHTMLを生成
-                last_message_html = self.markdown_renderer.render(
-                    self.messages[-1][1], 
-                    self.messages[-1][0]
-                )
-                # JavaScriptで最後のメッセージのみ更新
-                self._update_last_message_js(last_message_html)
-                # スクロール位置を維持（部分更新時はスクロールしない）
+            # ストリーミング中は何もしない（ストリーミングテキストエリアで表示）
+            pass
     
     def _update_last_message_js(self, message_html):
         """JavaScriptで最後のメッセージのみ更新"""
-        try:
-            # HTMLをJavaScript文字列としてエスケープ
-            escaped_html = (message_html
-                .replace('\\', '\\\\')
-                .replace('\n', '\\n')
-                .replace('\r', '\\r')
-                .replace('"', '\\"')
-                .replace('</script>', '<\\/script>'))
-            
-            js_code = f"""
-            (function() {{
-                var messagesDiv = document.getElementById('messages');
-                if (!messagesDiv) return;
-                
-                var lastMessage = messagesDiv.lastElementChild;
-                if (lastMessage && lastMessage.classList.contains('message-assistant')) {{
-                    // 内容のみを更新（DOM構造を保持）
-                    var tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = "{escaped_html}";
-                    var newMessage = tempDiv.firstElementChild;
-                    if (newMessage) {{
-                        // メッセージコンテンツ部分のみを更新
-                        var oldContent = lastMessage.querySelector('.message-content');
-                        var newContent = newMessage.querySelector('.message-content');
-                        if (oldContent && newContent) {{
-                            oldContent.innerHTML = newContent.innerHTML;
-                        }} else {{
-                            // フォールバック：全体を置換
-                            messagesDiv.replaceChild(newMessage, lastMessage);
-                        }}
-                    }}
-                }} else {{
-                    // 新しいアシスタントメッセージを追加
-                    messagesDiv.insertAdjacentHTML('beforeend', "{escaped_html}");
-                }}
-                
-                // JavaScriptインターフェースを再登録（新しいボタン用）
-                if (typeof pyInsertCode !== 'undefined' && typeof pyCopyCode !== 'undefined') {{
-                    console.log('JavaScript API is available for new buttons');
-                }}
-            }})();
-            """
-            self.html_frame.run_javascript(js_code)
-            
-        except Exception as e:
-            logger.error(f"Could not update last message: {e}")
-            # エラーの場合はフォールバックとして完全更新
-            self._update_html(full_reload=True)
+        # 新しいアプローチでは使用しない
+        pass
     
     @measure_performance("chat_view.append_message_js")
     def _append_message_js(self, sender: str, text: str):
@@ -478,6 +455,10 @@ class LLMChatViewHTML(ttk.Frame):
             if result:
                 self._html_ready = True
                 logger.debug("HTML is ready")
+                # HTMLが準備完了したらスクロール管理システムを初期化
+                if not hasattr(self, '_scroll_manager_initialized'):
+                    self._init_scroll_manager()
+                    self._scroll_manager_initialized = True
             else:
                 # まだ準備ができていない場合は再チェック
                 self.after(50, self._check_html_ready)
@@ -486,6 +467,12 @@ class LLMChatViewHTML(ttk.Frame):
             # エラーの場合も再チェック（タイムアウトまで）
             if self._html_ready_check_count < 200:
                 self.after(50, self._check_html_ready)
+    
+    
+    def _init_scroll_manager(self):
+        """JavaScriptスクロール管理システムを初期化"""
+        # シンプルなスクロール管理
+        pass
     
     def _scroll_to_bottom(self):
         """HTMLフレームを最下部にスクロール"""
@@ -597,8 +584,9 @@ class LLMChatViewHTML(ttk.Frame):
         if self._html_ready:
             # JavaScriptで新しいメッセージを追加（全体再読み込みを避ける）
             self._append_message_js(sender, text)
-            # メッセージ追加後にスクロール
-            self._scroll_to_bottom()
+            # ユーザーメッセージの場合のみ自動スクロール（会話開始時）
+            if sender == "user":
+                self._scroll_to_bottom()
         else:
             # HTMLが準備できていない場合は、準備完了を待ってから追加
             self._add_message_when_ready(sender, text)
@@ -612,8 +600,9 @@ class LLMChatViewHTML(ttk.Frame):
         if self._html_ready:
             # JavaScriptで新しいメッセージを追加
             self._append_message_js(sender, text)
-            # スクロール
-            self._scroll_to_bottom()
+            # ユーザーメッセージの場合のみスクロール
+            if sender == "user":
+                self._scroll_to_bottom()
         else:
             # まだ準備ができていない場合は再試行（最大100回）
             if retry_count < 100:
@@ -675,6 +664,9 @@ class LLMChatViewHTML(ttk.Frame):
         
         self._add_message("user", display_message)
         
+        # ユーザーメッセージ追加後に最下部にスクロール
+        self.after(100, self._scroll_to_bottom)
+        
         # 処理中フラグ
         self._processing = True
         with self._message_lock:
@@ -682,6 +674,10 @@ class LLMChatViewHTML(ttk.Frame):
         self._stop_generation = False
         self._first_token_received = False
         self.send_button.config(text="Stop", state=tk.NORMAL)
+        
+        # 新しいメッセージIDを生成
+        import time
+        self._current_message_id = f"msg_{int(time.time() * 1000)}"
         
         # グローバルの生成状態を更新
         from .. import set_llm_busy
@@ -698,16 +694,55 @@ class LLMChatViewHTML(ttk.Frame):
         )
         thread.start()
     
+    def _get_system_prompt(self) -> str:
+        """スキルレベルと言語設定に応じたシステムプロンプトを生成（フォーマット文字列置換付き）"""
+        workbench = get_workbench()
+        
+        # 設定値を取得
+        skill_level_setting = workbench.get_option("llm.skill_level", "beginner")
+        language_setting = workbench.get_option("llm.language", "auto")
+        custom_prompt = workbench.get_option("llm.custom_system_prompt", "")
+        
+        # カスタムプロンプトが設定されている場合はそれを使用
+        if custom_prompt.strip():
+            template = custom_prompt
+        else:
+            # デフォルトテンプレート（共通定数から取得）
+            from ..prompts import DEFAULT_SYSTEM_PROMPT_TEMPLATE
+            template = DEFAULT_SYSTEM_PROMPT_TEMPLATE
+        
+        # スキルレベルの詳細説明を生成（共通定数から取得）
+        from ..prompts import SKILL_LEVEL_DESCRIPTIONS
+        
+        skill_level_detailed = SKILL_LEVEL_DESCRIPTIONS.get(skill_level_setting, skill_level_setting)
+        
+        # フォーマット文字列を置換
+        try:
+            formatted_prompt = template.format(
+                skill_level=skill_level_detailed,
+                language=language_setting
+            )
+            return formatted_prompt
+        except KeyError as e:
+            # フォーマット文字列にエラーがある場合はそのまま返す
+            return template
+    
     def _prepare_conversation_history(self) -> list:
-        """会話履歴をLLM用の形式に変換"""
+        """会話履歴をLLM用の形式に変換（システムプロンプト付き）"""
         history = []
         
+        # システムプロンプトを最初に追加
+        system_prompt = self._get_system_prompt()
+        history.append({"role": "system", "content": system_prompt})
+        
         # 最新の会話履歴から適切な数だけ取得（メモリ制限のため）
-        # システムメッセージは除外し、ユーザーとアシスタントの会話のみ
         workbench = get_workbench()
         max_history = workbench.get_option("llm.max_conversation_history", 10)  # デフォルト10ターン
         
-        for sender, text in self.messages[-max_history:]:
+        # 現在生成中の場合、最新のユーザーメッセージは除外する
+        messages_to_process = self.messages[:-1] if self._processing else self.messages
+        
+        for sender, text in messages_to_process[-max_history:]:
             if sender == "user":
                 # コンテキスト情報を除去（[Context: ...]の部分）
                 clean_text = text
@@ -716,7 +751,7 @@ class LLMChatViewHTML(ttk.Frame):
                 history.append({"role": "user", "content": clean_text})
             elif sender == "assistant":
                 history.append({"role": "assistant", "content": text})
-            # システムメッセージは除外
+            # システムメッセージ（UI上の）は除外（システムプロンプトとは別）
         
         return history
     
@@ -848,34 +883,41 @@ Based on this context, {message}"""
                 msg_type, content = self.message_queue.get_nowait()
                 
                 if msg_type == "token":
-                    # 最初のトークンを受け取ったらアニメーションを停止
+                    # 最初のトークンを受け取ったら準備完了
                     if not self._first_token_received:
                         self._first_token_received = True
-                        self._stop_generating_animation()
+                        # ストリーミングフレームのタイトルを更新
+                        self.streaming_frame.config(text=tr("Assistant"))
                     
                     with self._message_lock:
                         self._current_message += content
+                    
+                    # ストリーミングテキストに追加表示
+                    self.streaming_text.config(state=tk.NORMAL)
+                    self.streaming_text.insert(tk.END, content)
+                    self.streaming_text.see(tk.END)
+                    self.streaming_text.config(state=tk.DISABLED)
+                    
                     update_needed = True
                 
                 elif msg_type == "complete":
-                    # アニメーションを停止（まだ停止していない場合）
+                    # ストリーミングエリアを非表示にしてHTMLビューに転送
                     self._stop_generating_animation()
                     
-                    # 現在のメッセージがある場合、最終的に確定
+                    # 現在のメッセージがある場合、HTMLビューに転送
                     with self._message_lock:
                         current_msg = self._current_message
                     
                     if current_msg:
-                        # ストリーミング中に既に追加されている場合は更新のみ
-                        if self.messages and self.messages[-1][0] == "assistant":
-                            # 最後のメッセージを現在のメッセージで確定
-                            self.messages[-1] = ("assistant", current_msg)
-                        else:
-                            # アシスタントメッセージがない場合は新規追加
-                            self.messages.append(("assistant", current_msg))
+                        # アシスタントメッセージを追加
+                        self.messages.append(("assistant", current_msg))
                         
-                        # 最終更新を即座に実行
-                        self._update_html(full_reload=False)
+                        # HTMLビューに完全なメッセージを表示
+                        self._update_html(full_reload=True)
+                        
+                        # HTMLの更新完了後に最下部にスクロール
+                        self.after(200, self._scroll_to_bottom)
+                        
                         with self._message_lock:
                             self._current_message = ""
                         
@@ -895,7 +937,7 @@ Based on this context, {message}"""
                     set_llm_busy(False)
                 
                 elif msg_type == "error":
-                    # アニメーションを停止
+                    # ストリーミングエリアを非表示
                     self._stop_generating_animation()
                     
                     self._add_message("system", f"Error: {content}")
@@ -913,37 +955,16 @@ Based on this context, {message}"""
         except queue.Empty:
             pass
         
-        # ストリーミング中のメッセージを定期的に更新
-        if update_needed and self._current_message:
-            # 最後のメッセージがアシスタントなら更新、そうでなければ追加
-            if self.messages and self.messages[-1][0] == "assistant":
-                self.messages[-1] = ("assistant", self._current_message)
-            else:
-                self.messages.append(("assistant", self._current_message))
-            
-            # レート制限付きで更新（100ms間隔で部分更新）
-            current_time = time.time() * 1000  # ミリ秒
-            if not self._update_pending and (current_time - self._last_update_time) > 100:
-                self._update_html(full_reload=False)  # ストリーミング中は部分更新のみ
-                self._last_update_time = current_time
-                # ストリーミング中のスクロール
-                self._scroll_to_bottom()
-            else:
-                # 更新を予約
-                if not self._update_pending:
-                    self._update_pending = True
-                    self.after(100, self._delayed_update)
+        # ストリーミング中はHTMLビューを更新しない（ストリーミングテキストエリアで表示中）
+        # HTMLビューの更新は完了時に一度だけ実行
         
         # 次のチェックをスケジュール
         self._queue_check_id = self.after(50, self._process_queue)
     
     def _delayed_update(self):
-        """遅延更新を実行"""
-        self._update_pending = False
-        self._update_html(full_reload=False)  # 遅延更新も部分更新を使用
-        self._last_update_time = time.time() * 1000
-        # 遅延更新時のスクロール
-        self._scroll_to_bottom()
+        """遅延更新を実行（ストリーミング中は使用しない）"""
+        # 新しいアプローチでは使用しない
+        pass
     
     def explain_code(self, code: str):
         """コードを説明（外部から呼ばれる）"""
@@ -962,7 +983,34 @@ Based on this context, {message}"""
                 lang_map = {'.py': 'python', '.js': 'javascript', '.java': 'java', '.cpp': 'cpp', '.c': 'c'}
                 lang = lang_map.get(file_ext, 'python')
         
-        message = f"Please explain this code:\n```{lang}\n{code}\n```"
+        # 言語設定を取得
+        language_setting = workbench.get_option("llm.output_language", "auto")
+        if language_setting == "auto":
+            # Thonnyの言語設定から取得
+            thonny_lang = workbench.get_option("general.language", "en")
+            language_setting = "Japanese" if thonny_lang.startswith("ja") else "English"
+        elif language_setting == "ja":
+            language_setting = "Japanese"
+        elif language_setting == "en":
+            language_setting = "English"
+        
+        # スキルレベルを考慮したプロンプトを生成
+        skill_level = workbench.get_option("llm.skill_level", "beginner")
+        
+        # スキルレベルの指示（英語で統一）
+        if skill_level == "beginner":
+            skill_instruction = "Explain in simple terms for a beginner. Avoid technical jargon and use plain language."
+        elif skill_level == "intermediate":
+            skill_instruction = "Explain assuming basic programming knowledge."
+        else:  # advanced
+            skill_instruction = "Provide a detailed explanation including algorithmic efficiency and design considerations."
+        
+        # 言語別のプロンプト
+        if language_setting == "Japanese":
+            message = f"{skill_instruction}\n\n以下のコードを説明してください:\n```{lang}\n{code}\n```"
+        else:  # English
+            message = f"{skill_instruction}\n\nPlease explain this code:\n```{lang}\n{code}\n```"
+        
         self.input_text.delete("1.0", tk.END)
         self.input_text.insert("1.0", message)
         self._send_message()
@@ -1008,10 +1056,38 @@ Based on this context, {message}"""
                 except:
                     pass
             
-            if code:
-                prompt = f"I encountered this error:\n```\n{error_message}\n```\n\nIn this code:\n```python\n{code}\n```\n\nPlease explain what causes this error and how to fix it."
-            else:
-                prompt = f"I encountered this error:\n```\n{error_message}\n```\n\nPlease explain what causes this error and provide a solution."
+            # 言語設定とスキルレベルを取得
+            workbench_settings = get_workbench()
+            language_setting = workbench_settings.get_option("llm.output_language", "auto")
+            if language_setting == "auto":
+                thonny_lang = workbench_settings.get_option("general.language", "en")
+                language_setting = "Japanese" if thonny_lang.startswith("ja") else "English"
+            elif language_setting == "ja":
+                language_setting = "Japanese"
+            elif language_setting == "en":
+                language_setting = "English"
+            
+            skill_level = workbench_settings.get_option("llm.skill_level", "beginner")
+            
+            # スキルレベルの指示（英語で統一）
+            if skill_level == "beginner":
+                skill_instruction = "Explain the error in simple terms for a beginner and provide clear solutions."
+            elif skill_level == "intermediate":
+                skill_instruction = "Explain the error and solutions assuming basic programming knowledge."
+            else:  # advanced
+                skill_instruction = "Provide a technical explanation of the error and efficient solutions."
+            
+            # 言語別のプロンプト
+            if language_setting == "Japanese":
+                if code:
+                    prompt = f"{skill_instruction}\n\n以下のエラーが発生しました:\n```\n{error_message}\n```\n\nこのコードで:\n```python\n{code}\n```"
+                else:
+                    prompt = f"{skill_instruction}\n\n以下のエラーが発生しました:\n```\n{error_message}\n```"
+            else:  # English
+                if code:
+                    prompt = f"{skill_instruction}\n\nI encountered this error:\n```\n{error_message}\n```\n\nIn this code:\n```python\n{code}\n```"
+                else:
+                    prompt = f"{skill_instruction}\n\nI encountered this error:\n```\n{error_message}\n```"
             
             self.input_text.delete("1.0", tk.END)
             self.input_text.insert("1.0", prompt)
@@ -1101,102 +1177,33 @@ Based on this context, {message}"""
             logger.error(f"Failed to load chat history: {e}")
     
     def _start_generating_animation(self):
-        """Generating...アニメーションを開始"""
+        """生成中のアニメーションを開始（ストリーミングエリアを表示）"""
         try:
             # 既存のアニメーションがあれば停止
             if self._generating_animation_id:
                 self.after_cancel(self._generating_animation_id)
                 self._generating_animation_id = None
             
-            # アニメーション用の初期メッセージを追加
-            self._add_message("assistant", tr("Generating..."))
-            self._animation_dots = 0
-            
-            # アニメーションを開始
-            self._update_animation()
+            # ストリーミングフレームを表示（HTMLビューと入力エリアの間に配置）
+            self.streaming_frame.grid(row=2, column=0, sticky="ew", padx=3, pady=2)
+            # ストリーミングテキストをクリアして準備
+            self.streaming_text.config(state=tk.NORMAL)
+            self.streaming_text.delete("1.0", tk.END)
+            self.streaming_text.config(state=tk.DISABLED)
             
         except Exception as e:
             logger.error(f"Error starting animation: {e}")
     
-    def _update_animation(self):
-        """アニメーションを更新"""
-        try:
-            # アニメーションIDをクリア（多重登録を防ぐ）
-            self._generating_animation_id = None
-            
-            if not self._processing or self._first_token_received:
-                return
-            
-            # ドットの数を更新（0〜3の循環）
-            self._animation_dots = (self._animation_dots + 1) % 4
-            dots = "." * self._animation_dots
-            
-            # 最後のメッセージを更新
-            if self.messages and self.messages[-1][0] == "assistant":
-                # 翻訳されたテキストを取得（ドットを除く）
-                base_text = tr("Generating...").rstrip(".")
-                self.messages[-1] = ("assistant", f"{base_text}{dots}")
-                
-                # JavaScriptで最後のメッセージを更新
-                try:
-                    js_code = f"""
-                    (function() {{
-                        var messages = document.querySelectorAll('.message.assistant');
-                        if (messages.length > 0) {{
-                            var lastMessage = messages[messages.length - 1];
-                            var contentDiv = lastMessage.querySelector('.message-content');
-                            if (contentDiv) {{
-                                contentDiv.innerHTML = '<p>{base_text}{dots}</p>';
-                            }}
-                        }}
-                    }})();
-                    """
-                    self.html_frame.run_javascript(js_code)
-                except Exception as e:
-                    logger.debug(f"Could not update animation: {e}")
-            
-            # 500ms後に再度更新（処理中かつトークン未受信の場合のみ）
-            if self._processing and not self._first_token_received:
-                self._generating_animation_id = self.after(500, self._update_animation)
-            
-        except Exception as e:
-            logger.error(f"Error updating animation: {e}")
-    
     def _stop_generating_animation(self):
-        """Generating...アニメーションを停止"""
+        """生成中のアニメーションを停止（ストリーミングエリアを非表示）"""
         try:
             # アニメーションIDをキャンセル
             if self._generating_animation_id:
                 self.after_cancel(self._generating_animation_id)
                 self._generating_animation_id = None
             
-            # アニメーションメッセージを削除（実際のコンテンツがまだない場合）
-            with self._message_lock:
-                current_msg = self._current_message
-            
-            if current_msg == "" and self.messages and self.messages[-1][0] == "assistant":
-                # 最後のメッセージがアニメーションメッセージの場合は削除
-                base_text = tr("Generating...").rstrip(".")
-                if self.messages[-1][1].startswith(base_text):
-                    self.messages.pop()
-                    
-                    # JavaScriptで最後のメッセージを削除
-                    try:
-                        js_code = f"""
-                        (function() {{
-                            var messages = document.querySelectorAll('.message.assistant');
-                            if (messages.length > 0) {{
-                                var lastMessage = messages[messages.length - 1];
-                                var content = lastMessage.querySelector('.message-content');
-                                if (content && content.textContent.startsWith('{base_text}')) {{
-                                    lastMessage.remove();
-                                }}
-                            }}
-                        }})();
-                        """
-                        self.html_frame.run_javascript(js_code)
-                    except Exception as e:
-                        logger.debug(f"Could not remove animation message: {e}")
+            # ストリーミングフレームを非表示
+            self.streaming_frame.grid_remove()
             
         except Exception as e:
             logger.error(f"Error stopping animation: {e}")

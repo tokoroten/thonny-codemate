@@ -171,6 +171,42 @@ class ChatGPTProvider(ExternalProvider):
             yield f"[Error: {str(e)}]"
             return
     
+    def get_model_info(self, model_name: Optional[str] = None) -> Dict[str, Any]:
+        """モデルの詳細情報を取得（コンテキストサイズを含む）"""
+        model = model_name or self.model
+        
+        # OpenAI/ChatGPTのコンテキストサイズは既知の値で判定
+        openai_models = {
+            "gpt-4o": 128000,
+            "gpt-4o-mini": 128000,
+            "gpt-4-turbo": 128000,
+            "gpt-4-turbo-preview": 128000,
+            "gpt-4-0125-preview": 128000,
+            "gpt-4-1106-preview": 128000,
+            "gpt-4": 8192,
+            "gpt-4-0613": 8192,
+            "gpt-4-32k": 32768,
+            "gpt-4-32k-0613": 32768,
+            "gpt-3.5-turbo": 16385,
+            "gpt-3.5-turbo-0125": 16385,
+            "gpt-3.5-turbo-1106": 16385,
+            "gpt-3.5-turbo-16k": 16385,
+            "text-davinci-003": 4097,
+            "text-davinci-002": 4097,
+        }
+        
+        # 完全一致
+        if model in openai_models:
+            return {"context_size": openai_models[model]}
+        
+        # 部分一致（モデル名にバージョンが含まれる場合）
+        for known_model, size in openai_models.items():
+            if known_model in model:
+                return {"context_size": size}
+        
+        # 不明なモデルの場合
+        return {"context_size": None, "error": f"Unknown model: {model}"}
+    
     @retry_network_operation
     def test_connection(self) -> Dict[str, Any]:
         """接続テスト（リトライ付き）"""
@@ -427,6 +463,88 @@ class OllamaProvider(ExternalProvider):
             logger.error(f"Failed to fetch models: {e}")
             return []
     
+    def get_model_info(self, model_name: Optional[str] = None) -> Dict[str, Any]:
+        """モデルの詳細情報を取得（コンテキストサイズを含む）"""
+        model = model_name or self.model
+        
+        try:
+            if self._detect_server_type():
+                # LM Studio: /api/v0/models エンドポイントを使用
+                req = urllib.request.Request(f"{self.base_url}/api/v0/models")
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    
+                    # 指定されたモデルを検索
+                    for model_data in result:
+                        if model_data.get('id') == model or model_data.get('name') == model:
+                            max_context_length = model_data.get('max_context_length')
+                            return {
+                                "context_size": max_context_length,
+                                "model_data": model_data
+                            }
+                    
+                    # モデルが見つからない場合
+                    available_models = [m.get('id', m.get('name', 'unknown')) for m in result]
+                    return {
+                        "context_size": None,
+                        "error": f"Model '{model}' not found in LM Studio models",
+                        "available_models": available_models
+                    }
+            else:
+                # Ollama: /api/show エンドポイントを使用
+                data = {"name": model}
+                req = urllib.request.Request(
+                    f"{self.base_url}/api/show",
+                    data=json.dumps(data).encode('utf-8'),
+                    headers=self.headers
+                )
+                
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    
+                    # モデル情報からコンテキストサイズを取得
+                    model_info = result.get('model_info', {})
+                    parameters = result.get('parameters', '')
+                    template = result.get('template', '')
+                    
+                    # さまざまな場所からコンテキストサイズを探す
+                    context_size = None
+                    
+                    # 1. model_info内のコンテキストサイズ
+                    if isinstance(model_info, dict):
+                        for key in ['context_length', 'max_position_embeddings', 'n_ctx']:
+                            if key in model_info:
+                                context_size = model_info[key]
+                                break
+                    
+                    # 2. parametersからnum_ctxを探す
+                    if context_size is None and parameters:
+                        # parametersは文字列形式で "num_ctx 4096" のような形式
+                        import re
+                        match = re.search(r'num_ctx\s+(\d+)', parameters)
+                        if match:
+                            context_size = int(match.group(1))
+                    
+                    # 3. templateからコンテキストサイズのヒントを探す
+                    if context_size is None and template:
+                        # 一部のモデルではtemplateにヒントがある場合がある
+                        if '128k' in template.lower() or '128000' in template:
+                            context_size = 128000
+                        elif '32k' in template.lower() or '32768' in template:
+                            context_size = 32768
+                        elif '8k' in template.lower() or '8192' in template:
+                            context_size = 8192
+                    
+                    return {
+                        "context_size": context_size,
+                        "model_info": model_info,
+                        "parameters": parameters,
+                        "template": template
+                    }
+        except Exception as e:
+            logger.error(f"Failed to get model info for {model}: {e}")
+            return {"context_size": None, "error": str(e)}
+    
     def test_connection(self) -> Dict[str, Any]:
         """接続テスト"""
         try:
@@ -541,6 +659,41 @@ class OpenRouterProvider(ExternalProvider):
         except Exception as e:
             logger.error(f"OpenRouter streaming failed: {e}")
             raise
+    
+    def get_model_info(self, model_name: Optional[str] = None) -> Dict[str, Any]:
+        """モデルの詳細情報を取得（コンテキストサイズを含む）"""
+        model = model_name or self.model
+        
+        try:
+            # OpenRouter API /v1/models エンドポイントを使用
+            req = urllib.request.Request(
+                f"{self.base_url}/models",
+                headers=self.headers
+            )
+            
+            context = ssl.create_default_context()
+            
+            with urllib.request.urlopen(req, context=context, timeout=10) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                
+                # 指定されたモデルを検索
+                for model_data in result.get('data', []):
+                    if model_data.get('id') == model:
+                        context_length = model_data.get('context_length')
+                        return {
+                            "context_size": context_length,
+                            "model_data": model_data
+                        }
+                
+                # モデルが見つからない場合
+                return {
+                    "context_size": None,
+                    "error": f"Model '{model}' not found in available models"
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get model info for {model}: {e}")
+            return {"context_size": None, "error": str(e)}
     
     def test_connection(self) -> Dict[str, Any]:
         """接続テスト"""

@@ -405,6 +405,15 @@ class SettingsDialog(tk.Toplevel):
         )
         context_spinbox.pack(side="left")
         
+        # 自動設定ボタンを追加
+        auto_context_button = ttk.Button(
+            context_frame,
+            text=tr("Auto"),
+            command=self._auto_set_context_size,
+            width=8
+        )
+        auto_context_button.pack(side="left", padx=(10, 0))
+        
         # Repeat Penalty
         repeat_frame = ttk.Frame(gen_frame)
         repeat_frame.pack(fill="x", pady=5)
@@ -1046,3 +1055,189 @@ class SettingsDialog(tk.Toplevel):
         
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
+    
+    def _get_model_max_context_size(self, provider: str, model_name: str = "") -> int:
+        """モデルの最大コンテキストサイズを取得"""
+        # ローカルモデルの場合
+        if provider == "local":
+            model_path = self.model_path_var.get()
+            if not model_path:
+                return 4096  # デフォルト値
+            
+            # GGUFファイルから直接メタデータを読み取る
+            try:
+                from llama_cpp import Llama, llama_model_n_ctx_train
+                
+                # モデルを最小限の設定で読み込む（n_ctx=0でGGUFのデフォルト値を使用）
+                llm = Llama(model_path=model_path, n_ctx=0, verbose=False)
+                
+                # トレーニング時のコンテキスト長を取得
+                n_ctx_train = llama_model_n_ctx_train(llm.model)
+                logger.info(f"Found training context length in GGUF: {n_ctx_train}")
+                return int(n_ctx_train)
+                
+            except ImportError:
+                raise ImportError("llama_cpp not available. Please install or upgrade llama-cpp-python>=0.3.9: pip install 'llama-cpp-python>=0.3.9'")
+            except Exception as e:
+                raise Exception(f"Error reading GGUF metadata from {Path(model_path).name}: {str(e)}")
+        
+        # OpenAI API の場合
+        elif provider == "openai":
+            if not model_name:
+                model_name = self.external_model_var.get()
+            
+            # ChatGPTプロバイダーからモデル情報を取得
+            try:
+                from ..external_providers import ChatGPTProvider
+                chatgpt_provider = ChatGPTProvider(
+                    api_key=self.api_key_var.get(),
+                    model=model_name,
+                    base_url=self.base_url_var.get() if hasattr(self, 'base_url_var') else None
+                )
+                
+                model_info = chatgpt_provider.get_model_info(model_name)
+                context_size = model_info.get("context_size")
+                
+                if context_size:
+                    logger.info(f"Found context size from ChatGPT provider: {context_size}")
+                    return int(context_size)
+                else:
+                    logger.warning(f"Could not get context size from ChatGPT provider: {model_info.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                logger.warning(f"Error getting context size from ChatGPT provider: {e}")
+            
+            return 4096  # デフォルト
+        
+        # LM Studio / Ollama の場合
+        elif provider in ["ollama", "ollama/lmstudio"]:
+            if not model_name:
+                model_name = self.external_model_var.get()
+            
+            # Ollama/LM Studio APIからモデル情報を取得
+            try:
+                from ..external_providers import OllamaProvider
+                ollama_provider = OllamaProvider(
+                    base_url=self.base_url_var.get(),
+                    model=model_name
+                )
+                
+                model_info = ollama_provider.get_model_info(model_name)
+                context_size = model_info.get("context_size")
+                
+                # サーバータイプを判定してログメッセージを調整
+                server_type = "LM Studio" if ":1234" in self.base_url_var.get() else "Ollama"
+                
+                if context_size:
+                    logger.info(f"Found context size from {server_type} API: {context_size}")
+                    return int(context_size)
+                else:
+                    logger.warning(f"Could not get context size from {server_type} API: {model_info.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                logger.warning(f"Error getting context size from Ollama/LM Studio API: {e}")
+            
+            # フォールバック: モデル名からコンテキストサイズを推定
+            model_lower = model_name.lower()
+            
+            if "llama" in model_lower:
+                if "3.2" in model_lower or "3.1" in model_lower:
+                    return 128000
+                elif "3" in model_lower:
+                    return 8192
+                else:
+                    return 4096
+            elif "qwen" in model_lower:
+                if "2.5" in model_lower:
+                    return 32768
+                else:
+                    return 8192
+            elif "gemma" in model_lower:
+                return 8192
+            elif "phi" in model_lower:
+                return 4096
+            elif "codellama" in model_lower:
+                return 16384
+            elif "mistral" in model_lower:
+                return 32768
+            elif "mixtral" in model_lower:
+                return 32768
+            else:
+                return 4096  # デフォルト
+        
+        # OpenRouter の場合
+        elif provider == "openrouter":
+            if not model_name:
+                model_name = self.external_model_var.get()
+            
+            # OpenRouter APIからモデル情報を取得
+            try:
+                from ..external_providers import OpenRouterProvider
+                openrouter_provider = OpenRouterProvider(
+                    api_key=self.api_key_var.get(),
+                    model=model_name
+                )
+                
+                model_info = openrouter_provider.get_model_info(model_name)
+                context_size = model_info.get("context_size")
+                
+                if context_size:
+                    logger.info(f"Found context size from OpenRouter API: {context_size}")
+                    return int(context_size)
+                else:
+                    logger.warning(f"Could not get context size from OpenRouter API: {model_info.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                logger.warning(f"Error getting context size from OpenRouter API: {e}")
+            
+            # フォールバック: デフォルト値
+            return 4096
+        
+        return 4096  # デフォルト値
+    
+    def _auto_set_context_size(self):
+        """現在の設定に基づいてコンテキストサイズを自動設定"""
+        try:
+            provider = self.provider_var.get()
+            
+            if provider == "local":
+                model_path = self.model_path_var.get()
+                if not model_path:
+                    messagebox.showwarning(
+                        tr("No Model Selected"),
+                        tr("Please select a local model first.")
+                    )
+                    return
+            elif provider in ["openai", "ollama", "ollama/lmstudio"]:
+                model_name = self.external_model_var.get()
+                if not model_name:
+                    messagebox.showwarning(
+                        tr("No Model Selected"),
+                        tr("Please select a model first.")
+                    )
+                    return
+            
+            # 最大コンテキストサイズを取得
+            max_context = self._get_model_max_context_size(provider)
+            
+            # 設定を更新
+            self.context_size_var.set(max_context)
+            
+            # ユーザーに通知
+            model_info = ""
+            if provider == "local":
+                model_info = Path(self.model_path_var.get()).name
+            else:
+                model_info = self.external_model_var.get()
+            
+            messagebox.showinfo(
+                tr("Context Size Updated"),
+                tr(f"Context size automatically set to {max_context:,} tokens for {model_info}")
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in auto context size setting: {e}")
+            messagebox.showerror(
+                tr("Error"),
+                tr(f"Failed to auto-set context size: {str(e)}")
+            )

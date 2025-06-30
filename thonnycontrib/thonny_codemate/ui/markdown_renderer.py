@@ -176,6 +176,8 @@ class MarkdownRenderer:
             background-color: #f8f8f8;
             font-size: 13px;
             line-height: 1.4;
+            /* スムーズスクロールを無効化（プログラム制御のため） */
+            scroll-behavior: auto !important;
         }}
         
         /* メッセージスタイル */
@@ -185,6 +187,9 @@ class MarkdownRenderer:
             border-radius: 6px;
             padding: 8px 10px;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+            /* 更新時のちらつき防止 */
+            transform: translateZ(0);
+            will-change: contents;
         }}
         
         .message-header {{
@@ -366,7 +371,7 @@ class MarkdownRenderer:
             }}
         }}
     </style>
-    <script>        
+    <script>
         // コードをコピー
         function copyCode(blockId) {{
             var sourceElement = document.getElementById(blockId + '-source');
