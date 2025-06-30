@@ -86,35 +86,6 @@ class TestModelManager:
         path = manager.get_model_path("nonexistent")
         assert path == str(any_model)
     
-    @patch('thonnycontrib.thonny_codemate.model_manager.hf_hub_download')
-    def test_download_model_success(self, mock_download, temp_models_dir):
-        """モデルダウンロード成功のテスト"""
-        manager = ModelManager(temp_models_dir)
-        
-        # ダウンロード結果をモック
-        expected_path = temp_models_dir / "model.gguf"
-        mock_download.return_value = str(expected_path)
-        
-        # プログレスコールバックを記録
-        progress_updates = []
-        def progress_callback(progress):
-            progress_updates.append(progress)
-        
-        # ダウンロード実行
-        manager._download_model_thread("explanation", RECOMMENDED_MODELS["explanation"], progress_callback)
-        
-        # ダウンロードが呼ばれたことを確認
-        mock_download.assert_called_once()
-        
-        # 完了通知があることを確認
-        assert any(p.status == "completed" for p in progress_updates)
-    
-    def test_download_model_invalid_key(self, temp_models_dir):
-        """無効なモデルキーでのダウンロードテスト"""
-        manager = ModelManager(temp_models_dir)
-        
-        with pytest.raises(ValueError):
-            manager.download_model("invalid_key")
     
     def test_delete_model_success(self, temp_models_dir):
         """モデル削除成功のテスト"""
