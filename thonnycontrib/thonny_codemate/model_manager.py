@@ -64,6 +64,18 @@ RECOMMENDED_MODELS = {
         "description": "Llama 3 ELYZA JP 8B - 日本語に特化した高性能モデル。",
         "languages": ["ja", "en"]
     },
+    # Future Code Ja 8B - GGUF版が提供されるまでコメントアウト
+    # ユーザーが自分で変換したGGUFファイルをmodelsディレクトリに配置することで使用可能
+    # 変換方法: docs/gguf_conversion_guide.md を参照
+    # "llama3.1-future-code-ja-8b": {
+    #     "name": "Llama-3.1-Future-Code-Ja-8B-Q4_K_M.gguf",
+    #     "repo_id": "future-architect/Llama-3.1-Future-Code-Ja-8B",
+    #     "filename": "Llama-3.1-Future-Code-Ja-8B-Q4_K_M.gguf",
+    #     "size": "~4.5GB (推定)",
+    #     "description": "Future Code Ja 8B - 日本語コード生成に特化。",
+    #     "languages": ["ja", "en", "code"],
+    #     "note": "GGUF版は提供されていません。変換ガイドを参照してください。"
+    # },
     "qwen2.5-coder-14b": {
         "name": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
         "repo_id": "bartowski/Qwen2.5-Coder-14B-Instruct-GGUF",

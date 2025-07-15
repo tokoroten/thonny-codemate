@@ -100,6 +100,7 @@ Recommended models:
 - **Qwen2.5-Coder-14B** - Latest high-performance model specialized for programming (8.8GB)
 - **Llama-3.2-1B/3B** - Lightweight and fast models (0.8GB/2.0GB)
 - **Llama-3-ELYZA-JP-8B** - Japanese-specialized model (4.9GB)
+- **Llama-3.1-Future-Code-Ja-8B** - Japanese code generation specialist (requires conversion, see below)
 
 ```bash
 # Install Hugging Face CLI
@@ -110,6 +111,18 @@ huggingface-cli download bartowski/Qwen2.5-Coder-14B-Instruct-GGUF Qwen2.5-Coder
 
 # Llama 3.2 1B (lightweight)
 huggingface-cli download bartowski/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-Q4_K_M.gguf --local-dir ./models
+```
+
+#### Future-Code-Ja-8B Model
+
+The Future-Code-Ja-8B model specializes in Japanese code generation but requires GGUF conversion:
+
+```bash
+# Use the conversion tool
+python tools/convert_to_gguf.py
+
+# Or manually convert following the guide
+# See: docs/gguf_conversion_guide.md
 ```
 
 ## Usage

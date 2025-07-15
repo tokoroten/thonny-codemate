@@ -94,6 +94,7 @@ CMAKE_ARGS="-DLLAMA_METAL=on" uv pip install llama-cpp-python --no-cache-dir
 - **Qwen2.5-Coder-14B** - プログラミングに特化した最新の高性能モデル（8.8GB）
 - **Llama-3.2-1B/3B** - 軽量で高速なモデル（0.8GB/2.0GB）
 - **Llama-3-ELYZA-JP-8B** - 日本語特化モデル（4.9GB）
+- **Llama-3.1-Future-Code-Ja-8B** - 日本語コード生成特化モデル（変換が必要、下記参照）
 
 ```bash
 # Hugging Face CLIをインストール
@@ -104,6 +105,18 @@ huggingface-cli download bartowski/Qwen2.5-Coder-14B-Instruct-GGUF Qwen2.5-Coder
 
 # Llama 3.2 1B（軽量版）
 huggingface-cli download bartowski/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-Q4_K_M.gguf --local-dir ./models
+```
+
+#### Future-Code-Ja-8Bモデル
+
+Future-Code-Ja-8Bモデルは日本語コード生成に特化していますが、GGUF変換が必要です：
+
+```bash
+# 変換ツールを使用
+python tools/convert_to_gguf.py
+
+# または手動で変換（ガイド参照）
+# 参照: docs/gguf_conversion_guide.md
 ```
 
 ## 使い方
